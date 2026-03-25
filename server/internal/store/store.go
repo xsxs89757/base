@@ -18,15 +18,8 @@ func Init() {
 	var err error
 	cfg := config.C.Database
 
-	var logLevel logger.LogLevel
-	if config.C.Server.Mode == "development" {
-		logLevel = logger.Info
-	} else {
-		logLevel = logger.Warn
-	}
-
 	DB, err = gorm.Open(sqlite.Open(cfg.DSN), &gorm.Config{
-		Logger: logger.Default.LogMode(logLevel),
+		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)

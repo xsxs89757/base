@@ -7,6 +7,7 @@ export namespace SystemConfigApi {
     [key: string]: any;
     configGroup: string;
     configKey: string;
+    configName: string;
     configValue: string;
     createTime?: string;
     id: string;

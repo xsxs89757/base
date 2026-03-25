@@ -1696,6 +1696,10 @@
                     "type": "string",
                     "example": "site_name"
                 },
+                "configName": {
+                    "type": "string",
+                    "example": "站点名称"
+                },
                 "configValue": {
                     "type": "string",
                     "example": "Admin"
@@ -1719,7 +1723,8 @@
         "admin.ConfigRequest": {
             "type": "object",
             "required": [
-                "configKey"
+                "configKey",
+                "configName"
             ],
             "properties": {
                 "configGroup": {
@@ -1729,6 +1734,10 @@
                 "configKey": {
                     "type": "string",
                     "example": "site_name"
+                },
+                "configName": {
+                    "type": "string",
+                    "example": "站点名称"
                 },
                 "configValue": {
                     "type": "string",

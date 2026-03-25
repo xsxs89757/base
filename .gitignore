@@ -17,6 +17,11 @@ Thumbs.db
 server/data.db
 server/server
 server/*.exe
+server/tmp
+
+# Deploy
+.deploy.env
+.build
 
 # Node / Frontend
 node_modules
@@ -60,3 +65,4 @@ vite.config.mts.*
 vite.config.mjs.*
 vite.config.js.*
 vite.config.ts.*
+.deploy.env

@@ -54,6 +54,7 @@ func GetConfigList(c *fiber.Ctx) error {
 	for i, cfg := range configs {
 		items[i] = admindto.ConfigItem{
 			ID:          cfg.ID,
+			ConfigName:  cfg.ConfigName,
 			ConfigKey:   cfg.ConfigKey,
 			ConfigValue: cfg.ConfigValue,
 			ConfigGroup: cfg.ConfigGroup,
@@ -99,6 +100,7 @@ func CreateConfig(c *fiber.Ctx) error {
 	}
 
 	cfg := adminmodel.Config{
+		ConfigName:  req.ConfigName,
 		ConfigKey:   req.ConfigKey,
 		ConfigValue: req.ConfigValue,
 		ConfigGroup: req.ConfigGroup,
@@ -129,6 +131,7 @@ func UpdateConfig(c *fiber.Ctx) error {
 	}
 
 	updates := map[string]any{
+		"config_name":  req.ConfigName,
 		"config_key":   req.ConfigKey,
 		"config_value": req.ConfigValue,
 		"config_group": req.ConfigGroup,

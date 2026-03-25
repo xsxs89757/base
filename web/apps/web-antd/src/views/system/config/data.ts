@@ -8,34 +8,36 @@ export function useFormSchema(): VbenFormSchema[] {
   return [
     {
       component: 'Input',
+      fieldName: 'configName',
+      label: $t('system.config.configName'),
+      rules: 'required',
+    },
+    {
+      component: 'Input',
       fieldName: 'configKey',
       label: $t('system.config.configKey'),
       rules: 'required',
     },
     {
-      component: 'Input',
-      fieldName: 'configValue',
-      label: $t('system.config.configValue'),
-      rules: 'required',
-    },
-    {
-      component: 'Input',
-      fieldName: 'configGroup',
-      label: $t('system.config.configGroup'),
-    },
-    {
-      component: 'RadioGroup',
+      component: 'Switch',
       componentProps: {
-        buttonStyle: 'solid',
-        options: [
-          { label: $t('common.enabled'), value: 1 },
-          { label: $t('common.disabled'), value: 0 },
-        ],
-        optionType: 'button',
+        checkedChildren: $t('common.enabled'),
+        checkedValue: 1,
+        unCheckedChildren: $t('common.disabled'),
+        unCheckedValue: 0,
       },
       defaultValue: 1,
       fieldName: 'status',
       label: $t('system.config.status'),
+    },
+    {
+      component: 'Textarea',
+      componentProps: {
+        rows: 6,
+      },
+      fieldName: 'configValue',
+      label: $t('system.config.configValue'),
+      rules: 'required',
     },
     {
       component: 'Textarea',
@@ -77,6 +79,11 @@ export function useColumns<T = SystemConfigApi.SystemConfig>(
   onStatusChange?: (newStatus: any, row: T) => PromiseLike<boolean | undefined>,
 ): VxeTableGridOptions['columns'] {
   return [
+    {
+      field: 'configName',
+      title: $t('system.config.configName'),
+      width: 160,
+    },
     {
       field: 'configKey',
       title: $t('system.config.configKey'),

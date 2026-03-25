@@ -1698,6 +1698,10 @@ const docTemplate = `{
                     "type": "string",
                     "example": "site_name"
                 },
+                "configName": {
+                    "type": "string",
+                    "example": "站点名称"
+                },
                 "configValue": {
                     "type": "string",
                     "example": "Admin"
@@ -1721,7 +1725,8 @@ const docTemplate = `{
         "admin.ConfigRequest": {
             "type": "object",
             "required": [
-                "configKey"
+                "configKey",
+                "configName"
             ],
             "properties": {
                 "configGroup": {
@@ -1731,6 +1736,10 @@ const docTemplate = `{
                 "configKey": {
                     "type": "string",
                     "example": "site_name"
+                },
+                "configName": {
+                    "type": "string",
+                    "example": "站点名称"
                 },
                 "configValue": {
                     "type": "string",
