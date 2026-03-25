@@ -1,0 +1,12 @@
+server:
+  port: 8080
+  mode: development
+
+database:
+  driver: sqlite
+  dsn: "./data.db"
+
+jwt:
+  secret: "your-secret-key-change-in-production"
+  expire: 168h    # 7 days
+  refresh_expire: 720h  # 30 days

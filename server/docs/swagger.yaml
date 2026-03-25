@@ -1,0 +1,1390 @@
+basePath: /
+definitions:
+  admin.ChangePasswordRequest:
+    properties:
+      newPassword:
+        example: "654321"
+        minLength: 6
+        type: string
+      oldPassword:
+        example: "123456"
+        type: string
+    required:
+    - newPassword
+    - oldPassword
+    type: object
+  admin.ConfigItem:
+    properties:
+      configGroup:
+        example: basic
+        type: string
+      configKey:
+        example: site_name
+        type: string
+      configValue:
+        example: Admin
+        type: string
+      createTime:
+        type: string
+      id:
+        example: 1
+        type: integer
+      remark:
+        type: string
+      status:
+        example: 1
+        type: integer
+    type: object
+  admin.ConfigRequest:
+    properties:
+      configGroup:
+        example: basic
+        type: string
+      configKey:
+        example: site_name
+        type: string
+      configValue:
+        example: Admin
+        type: string
+      remark:
+        type: string
+      status:
+        enum:
+        - 0
+        - 1
+        example: 1
+        type: integer
+    required:
+    - configKey
+    type: object
+  admin.CreateRoleRequest:
+    properties:
+      code:
+        example: new_role
+        type: string
+      menuIds:
+        items:
+          type: integer
+        type: array
+      name:
+        example: 新角色
+        type: string
+      remark:
+        type: string
+      status:
+        enum:
+        - 0
+        - 1
+        example: 1
+        type: integer
+    required:
+    - code
+    - name
+    type: object
+  admin.CreateUserRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        example: "123456"
+        minLength: 6
+        type: string
+      phone:
+        example: "13800138000"
+        type: string
+      realName:
+        example: 新用户
+        type: string
+      remark:
+        type: string
+      roleIds:
+        example:
+        - 1
+        - 2
+        items:
+          type: integer
+        type: array
+      status:
+        enum:
+        - 0
+        - 1
+        example: 1
+        type: integer
+      username:
+        example: newuser
+        maxLength: 32
+        minLength: 3
+        type: string
+    required:
+    - password
+    - realName
+    - username
+    type: object
+  admin.DeptRequest:
+    properties:
+      name:
+        example: 技术部
+        type: string
+      order:
+        example: 1
+        type: integer
+      pid:
+        example: 0
+        type: integer
+      remark:
+        type: string
+      status:
+        enum:
+        - 0
+        - 1
+        example: 1
+        type: integer
+    required:
+    - name
+    type: object
+  admin.LoginRequest:
+    properties:
+      password:
+        example: "123456"
+        type: string
+      username:
+        example: vben
+        type: string
+    required:
+    - password
+    - username
+    type: object
+  admin.LoginResponse:
+    properties:
+      accessToken:
+        example: eyJhbGciOi...
+        type: string
+      avatar:
+        type: string
+      homePath:
+        type: string
+      id:
+        example: 1
+        type: integer
+      realName:
+        example: Vben
+        type: string
+      roles:
+        example:
+        - super
+        items:
+          type: string
+        type: array
+      username:
+        example: vben
+        type: string
+    type: object
+  admin.MenuRequest:
+    properties:
+      affixTab:
+        type: boolean
+      authCode:
+        example: System:Menu:List
+        type: string
+      component:
+        example: /dashboard/index
+        type: string
+      icon:
+        example: lucide:layout-dashboard
+        type: string
+      iframeSrc:
+        type: string
+      keepAlive:
+        type: boolean
+      link:
+        type: string
+      name:
+        example: Dashboard
+        type: string
+      order:
+        example: 1
+        type: integer
+      path:
+        example: /dashboard
+        type: string
+      pid:
+        example: 0
+        type: integer
+      redirect:
+        type: string
+      status:
+        enum:
+        - 0
+        - 1
+        example: 1
+        type: integer
+      title:
+        example: 仪表盘
+        type: string
+      type:
+        enum:
+        - catalog
+        - menu
+        - button
+        - embedded
+        - link
+        example: menu
+        type: string
+    required:
+    - name
+    - title
+    - type
+    type: object
+  admin.OperationLogItem:
+    properties:
+      createTime:
+        type: string
+      duration:
+        type: integer
+      id:
+        type: integer
+      ip:
+        type: string
+      method:
+        type: string
+      path:
+        type: string
+      status:
+        type: integer
+      userAgent:
+        type: string
+      username:
+        type: string
+    type: object
+  admin.RoleItem:
+    properties:
+      code:
+        example: super
+        type: string
+      createTime:
+        example: 2026/01/01 00:00:00
+        type: string
+      id:
+        example: 1
+        type: integer
+      name:
+        example: 超级管理员
+        type: string
+      permissions:
+        items:
+          type: integer
+        type: array
+      remark:
+        example: 拥有所有权限
+        type: string
+      status:
+        example: 1
+        type: integer
+    type: object
+  admin.UpdateUserRequest:
+    properties:
+      email:
+        example: user@example.com
+        type: string
+      password:
+        minLength: 6
+        type: string
+      phone:
+        example: "13800138000"
+        type: string
+      realName:
+        example: 更新名称
+        type: string
+      remark:
+        type: string
+      roleIds:
+        example:
+        - 1
+        - 2
+        items:
+          type: integer
+        type: array
+      status:
+        enum:
+        - 0
+        - 1
+        example: 1
+        type: integer
+    type: object
+  admin.UserInfoResponse:
+    properties:
+      avatar:
+        type: string
+      homePath:
+        type: string
+      id:
+        example: 1
+        type: integer
+      realName:
+        example: Vben
+        type: string
+      roles:
+        example:
+        - super
+        items:
+          type: string
+        type: array
+      username:
+        example: vben
+        type: string
+    type: object
+  admin.UserItem:
+    properties:
+      email:
+        example: vben@example.com
+        type: string
+      id:
+        example: 1
+        type: integer
+      phone:
+        example: "13800138000"
+        type: string
+      realName:
+        example: Vben
+        type: string
+      remark:
+        type: string
+      roleIds:
+        example:
+        - 1
+        items:
+          type: integer
+        type: array
+      roles:
+        example:
+        - super
+        items:
+          type: string
+        type: array
+      status:
+        example: 1
+        type: integer
+      username:
+        example: vben
+        type: string
+    type: object
+  dto.IDResponse:
+    properties:
+      id:
+        example: 1
+        type: integer
+    type: object
+  dto.PageData:
+    properties:
+      items: {}
+      total:
+        example: 100
+        type: integer
+    type: object
+  dto.Response:
+    properties:
+      code:
+        example: 0
+        type: integer
+      data: {}
+      error: {}
+      message:
+        example: ok
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact:
+    email: admin@example.com
+    name: API Support
+  description: 基于 Go Fiber + GORM + Casbin + JWT 的后台管理系统 API 文档
+  termsOfService: http://swagger.io/terms/
+  title: Admin 后台管理系统 API
+  version: "1.0"
+paths:
+  /admin/auth/change-password:
+    post:
+      consumes:
+      - application/json
+      description: 用户修改自己的密码，需验证旧密码
+      parameters:
+      - description: 密码信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.ChangePasswordRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 修改密码
+      tags:
+      - 认证
+  /admin/auth/codes:
+    get:
+      description: 返回当前登录用户拥有的所有权限码列表
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  items:
+                    type: string
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户权限码
+      tags:
+      - 认证
+  /admin/auth/login:
+    post:
+      consumes:
+      - application/json
+      description: 使用用户名和密码登录，返回 accessToken
+      parameters:
+      - description: 登录参数
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.LoginResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 用户登录
+      tags:
+      - 认证
+  /admin/auth/logout:
+    post:
+      description: 清除 refresh token cookie
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 退出登录
+      tags:
+      - 认证
+  /admin/auth/refresh:
+    post:
+      description: 使用 cookie 中的 refresh token 获取新的 access token
+      produces:
+      - text/plain
+      responses:
+        "200":
+          description: 新的 access token
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/dto.Response'
+      summary: 刷新 Access Token
+      tags:
+      - 认证
+  /admin/menu/all:
+    get:
+      description: 根据当前用户角色返回可访问的菜单树(用于前端动态路由)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  items:
+                    type: object
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户的菜单树
+      tags:
+      - 菜单
+  /admin/system/config:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: 配置信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.ConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.IDResponse'
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 创建配置
+      tags:
+      - 系统管理 - 配置
+  /admin/system/config/{id}:
+    delete:
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除配置
+      tags:
+      - 系统管理 - 配置
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: 配置ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 配置信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.ConfigRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新配置
+      tags:
+      - 系统管理 - 配置
+  /admin/system/config/groups:
+    get:
+      description: 返回所有不重复的配置分组名称
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  items:
+                    type: string
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 获取配置分组列表
+      tags:
+      - 系统管理 - 配置
+  /admin/system/config/list:
+    get:
+      description: 分页查询配置列表，支持按 key、分组和状态筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: pageSize
+        type: integer
+      - description: 配置键(模糊搜索)
+        in: query
+        name: configKey
+        type: string
+      - description: 配置分组
+        in: query
+        name: configGroup
+        type: string
+      - description: '状态: 0=禁用 1=启用'
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/dto.PageData'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/admin.ConfigItem'
+                        type: array
+                    type: object
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 获取配置列表
+      tags:
+      - 系统管理 - 配置
+  /admin/system/dept:
+    post:
+      consumes:
+      - application/json
+      description: 创建新部门
+      parameters:
+      - description: 部门信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.DeptRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.IDResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建部门
+      tags:
+      - 系统管理 - 部门
+  /admin/system/dept/{id}:
+    delete:
+      description: 删除指定部门及其子部门
+      parameters:
+      - description: 部门ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除部门
+      tags:
+      - 系统管理 - 部门
+    put:
+      consumes:
+      - application/json
+      description: 更新部门信息
+      parameters:
+      - description: 部门ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 部门信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.DeptRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新部门
+      tags:
+      - 系统管理 - 部门
+  /admin/system/dept/list:
+    get:
+      description: 返回所有部门的树形结构
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  items:
+                    type: object
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取部门树形列表
+      tags:
+      - 系统管理 - 部门
+  /admin/system/menu:
+    post:
+      consumes:
+      - application/json
+      description: 创建新的菜单/目录/按钮
+      parameters:
+      - description: 菜单信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.MenuRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.IDResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建菜单
+      tags:
+      - 系统管理 - 菜单
+  /admin/system/menu/{id}:
+    delete:
+      description: 删除指定菜单及其子菜单
+      parameters:
+      - description: 菜单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除菜单
+      tags:
+      - 系统管理 - 菜单
+    put:
+      consumes:
+      - application/json
+      description: 更新菜单信息
+      parameters:
+      - description: 菜单ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 菜单信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.MenuRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新菜单
+      tags:
+      - 系统管理 - 菜单
+  /admin/system/menu/list:
+    get:
+      description: 返回所有菜单的树形结构(用于后台菜单管理页面)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  items:
+                    type: object
+                  type: array
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取菜单管理列表
+      tags:
+      - 系统管理 - 菜单
+  /admin/system/menu/name-exists:
+    get:
+      parameters:
+      - description: 菜单名称
+        in: query
+        name: name
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  type: boolean
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 检查菜单名称是否存在
+      tags:
+      - 系统管理 - 菜单
+  /admin/system/menu/path-exists:
+    get:
+      parameters:
+      - description: 路由路径
+        in: query
+        name: path
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  type: boolean
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 检查菜单路径是否存在
+      tags:
+      - 系统管理 - 菜单
+  /admin/system/operation-log/{id}:
+    delete:
+      parameters:
+      - description: 日志ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除操作日志
+      tags:
+      - 系统管理 - 操作日志
+  /admin/system/operation-log/clear:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 清空操作日志
+      tags:
+      - 系统管理 - 操作日志
+  /admin/system/operation-log/list:
+    get:
+      description: 分页查询操作日志，支持按用户名、请求方法、路径和状态筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: pageSize
+        type: integer
+      - description: 操作用户(模糊搜索)
+        in: query
+        name: username
+        type: string
+      - description: '请求方法: GET/POST/PUT/DELETE'
+        in: query
+        name: method
+        type: string
+      - description: 请求路径(模糊搜索)
+        in: query
+        name: path
+        type: string
+      - description: 响应状态码
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/dto.PageData'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/admin.OperationLogItem'
+                        type: array
+                    type: object
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 获取操作日志列表
+      tags:
+      - 系统管理 - 操作日志
+  /admin/system/role:
+    post:
+      consumes:
+      - application/json
+      description: 创建新角色并分配菜单权限
+      parameters:
+      - description: 角色信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.IDResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建角色
+      tags:
+      - 系统管理 - 角色
+  /admin/system/role/{id}:
+    delete:
+      description: 删除指定角色及其权限关联
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除角色
+      tags:
+      - 系统管理 - 角色
+    put:
+      consumes:
+      - application/json
+      description: 更新角色信息和菜单权限
+      parameters:
+      - description: 角色ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 角色信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.CreateRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新角色
+      tags:
+      - 系统管理 - 角色
+  /admin/system/role/all:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  items:
+                    $ref: '#/definitions/admin.RoleItem'
+                  type: array
+              type: object
+      security:
+      - BearerAuth: []
+      summary: 获取全部角色
+      tags:
+      - 系统管理 - 角色
+  /admin/system/role/list:
+    get:
+      description: 分页查询角色列表，支持按名称和状态筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: pageSize
+        type: integer
+      - description: 角色名(模糊搜索)
+        in: query
+        name: name
+        type: string
+      - description: '状态: 0=禁用 1=启用'
+        in: query
+        name: status
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/dto.PageData'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/admin.RoleItem'
+                        type: array
+                    type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取角色列表
+      tags:
+      - 系统管理 - 角色
+  /admin/system/user:
+    post:
+      consumes:
+      - application/json
+      description: 创建新用户并分配角色
+      parameters:
+      - description: 用户信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/dto.IDResponse'
+              type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 创建用户
+      tags:
+      - 系统管理 - 用户
+  /admin/system/user/{id}:
+    delete:
+      description: 删除指定用户
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 删除用户
+      tags:
+      - 系统管理 - 用户
+    put:
+      consumes:
+      - application/json
+      description: 更新用户信息和角色分配
+      parameters:
+      - description: 用户ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 用户信息
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/admin.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/dto.Response'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 更新用户
+      tags:
+      - 系统管理 - 用户
+  /admin/system/user/list:
+    get:
+      description: 分页查询用户列表，支持按用户名和状态筛选
+      parameters:
+      - default: 1
+        description: 页码
+        in: query
+        name: page
+        type: integer
+      - default: 20
+        description: 每页数量
+        in: query
+        name: pageSize
+        type: integer
+      - description: 用户名(模糊搜索)
+        in: query
+        name: username
+        type: string
+      - description: '状态: 0=禁用 1=启用'
+        in: query
+        name: status
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  allOf:
+                  - $ref: '#/definitions/dto.PageData'
+                  - properties:
+                      items:
+                        items:
+                          $ref: '#/definitions/admin.UserItem'
+                        type: array
+                    type: object
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取用户列表
+      tags:
+      - 系统管理 - 用户
+  /admin/user/info:
+    get:
+      description: 返回当前登录用户的基本信息
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            allOf:
+            - $ref: '#/definitions/dto.Response'
+            - properties:
+                data:
+                  $ref: '#/definitions/admin.UserInfoResponse'
+              type: object
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/dto.Response'
+      security:
+      - BearerAuth: []
+      summary: 获取当前用户信息
+      tags:
+      - 用户
+schemes:
+- http
+- https
+securityDefinitions:
+  BearerAuth:
+    description: 输入 Bearer {token} 格式的 JWT 令牌
+    in: header
+    name: Authorization
+    type: apiKey
+swagger: "2.0"

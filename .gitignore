@@ -1,0 +1,62 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea
+.vscode
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.history
+.cursor
+
+# Go
+server/data.db
+server/server
+server/*.exe
+
+# Node / Frontend
+node_modules
+dist
+dist-ssr
+dist.zip
+dist.tar
+dist.war
+.nitro
+.output
+*-dist.zip
+*-dist.tar
+*-dist.war
+coverage
+*.local
+**/.vitepress/cache
+.cache
+.turbo
+.temp
+dev-dist
+.stylelintcache
+yarn.lock
+package-lock.json
+.VSCodeCounter
+**/backend-mock/data
+
+# env local overrides
+.env.local
+.env.*.local
+.eslintcache
+
+# logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+vite.config.mts.*
+vite.config.mjs.*
+vite.config.js.*
+vite.config.ts.*
