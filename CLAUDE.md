@@ -148,8 +148,14 @@ docs: update API documentation
 
 ### 生产部署
 ```bash
-./deploy.sh  # 使用 .deploy.env.example 配置
+./deploy.sh  # 使用 .deploy.env 配置
 ```
+
+**生产环境安全要求：**
+- 必须禁用 Swagger 文档访问（在 `main.go` 中注释或条件编译 Swagger 路由）
+- 使用环境变量控制 Swagger 开关，生产环境设置为 `ENABLE_SWAGGER=false`
+- 确保 JWT secret 使用强随机字符串
+- 配置 HTTPS 和防火墙规则
 
 ## 注意事项
 
@@ -157,6 +163,7 @@ docs: update API documentation
    - 不要在代码中硬编码敏感信息
    - 使用环境变量或配置文件
    - JWT secret 必须足够复杂
+   - **生产环境必须禁用 Swagger 文档**，避免 API 信息泄露
 
 2. **性能**
    - 使用数据库索引
@@ -205,4 +212,4 @@ pnpm build:antd                # 构建生产版本
 
 - 后端 API: http://localhost:8080
 - 前端开发: http://localhost:5666
-- Swagger UI: http://localhost:8080/swagger/index.html
+- Swagger UI: http://localhost:8080/swagger/index.html (仅开发环境)
