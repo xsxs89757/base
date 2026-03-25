@@ -161,3 +161,4 @@ go get gorm.io/driver/mysql
 # 或
 go get gorm.io/driver/postgres
 ```
+# base
