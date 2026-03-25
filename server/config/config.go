@@ -14,8 +14,9 @@ type Config struct {
 }
 
 type ServerConfig struct {
-	Port int    `yaml:"port"`
-	Mode string `yaml:"mode"`
+	Port          int    `yaml:"port"`
+	Mode          string `yaml:"mode"`
+	EnableSwagger bool   `yaml:"enable_swagger"`
 }
 
 type DatabaseConfig struct {

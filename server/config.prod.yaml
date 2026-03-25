@@ -1,13 +1,13 @@
 server:
   port: 8080
-  mode: development
-  enable_swagger: true  # 生产环境必须设置为 false
+  mode: production
+  enable_swagger: false  # 生产环境禁用 Swagger
 
 database:
   driver: sqlite
   dsn: "./data.db"
 
 jwt:
-  secret: "your-secret-key-change-in-production"
+  secret: "CHANGE-THIS-TO-STRONG-SECRET-IN-PRODUCTION"
   expire: 168h    # 7 days
   refresh_expire: 720h  # 30 days

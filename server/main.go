@@ -69,14 +69,16 @@ func main() {
 		AllowCredentials: true,
 	}))
 
-	// Swagger UI & OpenAPI JSON
-	app.Get("/swagger/*", swagger.HandlerDefault)
+	// Swagger UI (仅开发环境)
+	if config.C.Server.EnableSwagger {
+		app.Get("/swagger/*", swagger.HandlerDefault)
+		log.Printf("Swagger UI: http://localhost:%d/swagger/index.html", config.C.Server.Port)
+		log.Printf("OpenAPI JSON: http://localhost:%d/swagger/doc.json", config.C.Server.Port)
+	}
 
 	router.Setup(app)
 
 	addr := fmt.Sprintf(":%d", config.C.Server.Port)
 	log.Printf("Server starting on %s", addr)
-	log.Printf("Swagger UI: http://localhost:%d/swagger/index.html", config.C.Server.Port)
-	log.Printf("OpenAPI JSON: http://localhost:%d/swagger/doc.json", config.C.Server.Port)
 	log.Fatal(app.Listen(addr))
 }
