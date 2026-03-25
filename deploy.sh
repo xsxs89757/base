@@ -129,8 +129,8 @@ deploy_server() {
     [ "$TARGET_OS" = "windows" ] && BIN_NAME="${BIN_NAME}.exe"
 
     CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -ldflags="-s -w" -o "$BUILD_DIR/$BIN_NAME" .
-    cp config.yaml "$BUILD_DIR/config.yaml"
-    echo -e "${GREEN}        编译完成: $BIN_NAME${NC}"
+    cp config.prod.yaml "$BUILD_DIR/config.yaml"
+    echo -e "${GREEN}        编译完成: $BIN_NAME (使用生产配置)${NC}"
 
     echo -e "${YELLOW}[后端] 上传到服务器...${NC}"
     ssh_run "mkdir -p ${REMOTE_SERVER_DIR}"
