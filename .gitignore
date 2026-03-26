@@ -12,6 +12,7 @@ Thumbs.db
 *.sw?
 .history
 .cursor
+.claude
 
 # Go
 server/data.db
