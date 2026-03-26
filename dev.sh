@@ -44,11 +44,14 @@ if [ ! -f go.sum ]; then
     go mod tidy
 fi
 
-# generate swagger docs if swag is installed
+# generate swagger docs
 SWAG_BIN=$(go env GOPATH)/bin/swag
 if [ -f "$SWAG_BIN" ]; then
     echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
-    "$SWAG_BIN" init -g main.go -o docs --parseDependency --parseInternal 2>/dev/null || true
+    "$SWAG_BIN" init -g main.go -o docs --parseDependency || true
+    echo -e "${GREEN}      Swagger 文档已生成${NC}"
+else
+    echo -e "${YELLOW}      swag 未安装，跳过文档生成 (go install github.com/swaggo/swag/cmd/swag@latest)${NC}"
 fi
 
 "$AIR_BIN" &

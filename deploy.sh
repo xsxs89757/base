@@ -122,7 +122,7 @@ deploy_server() {
     SWAG_BIN="$(go env GOPATH)/bin/swag"
     if [ -f "$SWAG_BIN" ]; then
         echo -e "        生成 Swagger 文档..."
-        "$SWAG_BIN" init -g main.go -o docs --parseDependency --parseInternal 2>/dev/null || true
+        "$SWAG_BIN" init -g main.go -o docs --parseDependency || true
     fi
 
     BIN_NAME="$SERVER_BIN_NAME"
