@@ -3,6 +3,8 @@ server:
   mode: development          # development / production
   enable_swagger: true       # 生产环境设置为 false
   cors_origins: "*"          # 允许的跨域来源，多个用逗号分隔，如: https://admin.example.com,https://www.example.com
+  swagger_title: ""          # 留空使用默认值: Admin 后台管理系统 API
+  swagger_desc: ""           # 留空使用默认值
 
 database:
   driver: sqlite

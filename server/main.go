@@ -5,7 +5,7 @@ import (
 	"log"
 
 	"base/config"
-	_ "base/docs"
+	"base/docs"
 	"base/internal/middleware"
 	"base/internal/router"
 	"base/internal/store"
@@ -73,11 +73,16 @@ func main() {
 		AllowCredentials: corsOrigins != "*",
 	}))
 
-	// Swagger UI (仅开发环境)
 	if config.C.Server.EnableSwagger {
+		docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%d", config.C.Server.Port)
+		if config.C.Server.SwaggerTitle != "" {
+			docs.SwaggerInfo.Title = config.C.Server.SwaggerTitle
+		}
+		if config.C.Server.SwaggerDesc != "" {
+			docs.SwaggerInfo.Description = config.C.Server.SwaggerDesc
+		}
 		app.Get("/swagger/*", swagger.HandlerDefault)
 		log.Printf("Swagger UI: http://localhost:%d/swagger/index.html", config.C.Server.Port)
-		log.Printf("OpenAPI JSON: http://localhost:%d/swagger/doc.json", config.C.Server.Port)
 	}
 
 	router.Setup(app)

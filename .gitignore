@@ -20,6 +20,7 @@ server/*.exe
 server/tmp
 server/config.yaml
 server/config.prod.yaml
+server/docs
 
 # Deploy
 .deploy.env

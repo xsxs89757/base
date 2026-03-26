@@ -18,6 +18,8 @@ type ServerConfig struct {
 	Mode          string `yaml:"mode"`
 	EnableSwagger bool   `yaml:"enable_swagger"`
 	CorsOrigins   string `yaml:"cors_origins"`
+	SwaggerTitle  string `yaml:"swagger_title"`
+	SwaggerDesc   string `yaml:"swagger_desc"`
 }
 
 type DatabaseConfig struct {
