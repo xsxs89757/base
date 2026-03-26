@@ -17,6 +17,7 @@ type ServerConfig struct {
 	Port          int    `yaml:"port"`
 	Mode          string `yaml:"mode"`
 	EnableSwagger bool   `yaml:"enable_swagger"`
+	CorsOrigins   string `yaml:"cors_origins"`
 }
 
 type DatabaseConfig struct {
