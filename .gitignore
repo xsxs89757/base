@@ -18,6 +18,8 @@ server/data.db
 server/server
 server/*.exe
 server/tmp
+server/config.yaml
+server/config.prod.yaml
 
 # Deploy
 .deploy.env

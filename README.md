@@ -10,7 +10,6 @@
 - **Casbin v3** - 基于 RBAC 的权限控制
 - **JWT** - Token 认证
 - **Swagger/OpenAPI** - API 文档自动生成
-- **SQLite** - 开发环境数据库
 
 ### 前端 (web/)
 - **Vue 3** + **TypeScript**
@@ -26,19 +25,24 @@
 - Node.js 22+
 - pnpm 10+
 
-### 一键启动
+### 一键启动（开发）
 
 ```bash
+# 首次使用需复制配置文件
+cp server/config.yaml.example server/config.yaml
+
+# 启动 (后端 air 热更新 + 前端 Vite HMR)
 ./dev.sh
 ```
 
-自动编译后端、生成 Swagger 文档、启动前后端服务。按 `Ctrl+C` 停止所有服务。
+后端修改 `.go` 文件后自动重新编译，前端修改即时热更新。按 `Ctrl+C` 停止所有服务。
 
 ### 手动启动
 
 **后端：**
 ```bash
 cd server
+cp config.yaml.example config.yaml  # 首次
 go mod tidy
 go run main.go
 ```
@@ -60,36 +64,84 @@ pnpm dev:antd
 | admin | 123456 | admin | 管理员 |
 | jack | 123456 | user | 普通用户，仅查看权限 |
 
+> 超级管理员 (id=1) 不受任何权限限制，不会出现在用户管理列表中，不可被修改或删除。
+
 ## 项目结构
 
 ```
-├── dev.sh                     # 一键启动脚本
-├── server/                    # Go 后端
-│   ├── main.go                # 入口文件
-│   ├── config.yaml            # 配置文件
-│   ├── config/                # 配置解析
-│   ├── docs/                  # Swagger 自动生成文档
-│   │   ├── docs.go
-│   │   ├── swagger.json       # OpenAPI JSON (可导入 Postman/Apifox)
-│   │   └── swagger.yaml       # OpenAPI YAML
-│   ├── internal/
-│   │   ├── database/          # 数据库初始化 & 种子数据
-│   │   ├── handler/           # 路由处理器 (含 Swagger 注解)
-│   │   ├── middleware/        # JWT 认证 & Casbin 权限中间件
-│   │   ├── model/             # GORM 数据模型
-│   │   ├── router/            # 路由定义
-│   │   └── service/           # 业务逻辑
-│   └── rbac/                  # Casbin RBAC 配置
+├── dev.sh                       # 一键开发启动 (air 热更新)
+├── deploy.sh                    # 一键部署脚本
+├── .deploy.env.example          # 部署配置模板
 │
-├── web/                       # Vben Admin 前端
-│   ├── apps/
-│   │   ├── web-antd/          # Ant Design Vue 应用
-│   │   └── backend-mock/      # Mock 后端 (开发可选)
-│   ├── packages/              # 共享包
-│   └── internal/              # 内部构建工具
+├── server/                      # Go 后端
+│   ├── main.go                  # 入口文件
+│   ├── config.yaml.example      # 配置模板
+│   ├── .air.toml                # air 热更新配置
+│   ├── config/                  # 配置解析
+│   ├── docs/                    # Swagger 自动生成文档
+│   └── internal/
+│       ├── dto/                 # 数据传输对象
+│       │   ├── admin/           # 后台管理 DTO
+│       │   └── base.go          # 通用响应结构
+│       ├── handler/             # 路由处理器 (含 Swagger 注解)
+│       │   ├── admin/           # 后台管理 API
+│       │   └── api/             # 前台 API (预留)
+│       ├── middleware/          # JWT / Casbin / 操作日志中间件
+│       ├── model/               # GORM 数据模型
+│       │   └── admin/           # 后台管理模型
+│       ├── router/              # 路由定义
+│       ├── service/             # 业务逻辑
+│       │   └── admin/           # 后台管理服务
+│       ├── store/               # 数据库初始化 & 种子数据
+│       └── validator/           # 请求验证
 │
-└── README.md
+└── web/                         # Vben Admin 前端
+    ├── apps/
+    │   └── web-antd/            # Ant Design Vue 应用
+    │       └── src/
+    │           ├── adapter/     # 组件适配器
+    │           ├── api/         # API 接口定义
+    │           ├── locales/     # 国际化 (中/英)
+    │           └── views/       # 页面
+    │               └── system/  # 系统管理模块
+    └── packages/                # 共享包
 ```
+
+## 部署
+
+### 配置
+
+```bash
+cp .deploy.env.example .deploy.env
+# 编辑 .deploy.env 填入服务器 SSH 信息和目录
+```
+
+### 部署命令
+
+```bash
+./deploy.sh all      # 全量部署 (默认)
+./deploy.sh server   # 仅部署后端
+./deploy.sh web      # 仅部署前端
+```
+
+部署脚本会：
+- **自动检测**远程服务器的系统和架构 (linux/amd64, linux/arm64 等)
+- **交叉编译** Go 后端 (`CGO_ENABLED=0`)
+- **打包** 前端静态资源
+- **SSH 上传**到服务器指定目录
+- **自动创建** systemd 服务（首次部署时）
+- **自动重启**服务
+
+## 功能模块
+
+| 模块 | 说明 |
+|------|------|
+| 用户管理 | 用户增删改查、角色分配、状态切换 |
+| 角色管理 | 角色增删改查、菜单权限分配 |
+| 菜单管理 | 菜单/目录/按钮管理、树形结构 |
+| 部门管理 | 部门树形管理 |
+| 配置管理 | 系统参数配置、按分组筛选 |
+| 操作日志 | 自动记录 POST/PUT/DELETE 操作 |
 
 ## API 文档
 
@@ -98,44 +150,40 @@ pnpm dev:antd
 
 ### OpenAPI 导入
 可将以下文件导入 Postman、Apifox、YApi 等 API 管理工具：
-- **JSON**: `http://localhost:8080/swagger/doc.json` 或 `server/docs/swagger.json`
+- **JSON**: `http://localhost:8080/swagger/doc.json`
 - **YAML**: `server/docs/swagger.yaml`
 
-### 重新生成文档
-修改 handler 中的 Swagger 注解后，运行：
-```bash
-cd server
-# 安装 swag CLI (仅首次)
-go install github.com/swaggo/swag/cmd/swag@latest
-
-# 生成文档
-$(go env GOPATH)/bin/swag init -g main.go -o docs --parseDependency --parseInternal
-```
+> 生产环境中 Swagger 默认关闭，通过 `config.yaml` 中 `enable_swagger: true` 开启。
 
 ## API 接口
 
 ### 认证
-- `POST /api/auth/login` - 登录
-- `POST /api/auth/logout` - 登出
-- `POST /api/auth/refresh` - 刷新 Token
-- `GET /api/auth/codes` - 获取权限码
+- `POST /admin/auth/login` - 登录
+- `POST /admin/auth/logout` - 登出
+- `POST /admin/auth/refresh` - 刷新 Token
+- `POST /admin/auth/change-password` - 修改密码
+- `GET /admin/auth/codes` - 获取权限码
 
 ### 用户
-- `GET /api/user/info` - 当前用户信息
+- `GET /admin/user/info` - 当前用户信息
 
 ### 菜单
-- `GET /api/menu/all` - 获取用户菜单 (前端路由)
+- `GET /admin/menu/all` - 获取用户菜单 (前端路由)
 
 ### 系统管理
-- `GET/POST/PUT/DELETE /api/system/role/*` - 角色管理
-- `GET/POST/PUT/DELETE /api/system/menu/*` - 菜单管理
-- `GET/POST/PUT/DELETE /api/system/dept/*` - 部门管理
-- `GET/POST/PUT/DELETE /api/system/user/*` - 用户管理
+- `GET/POST/PUT/DELETE /admin/system/user/*` - 用户管理
+- `GET/POST/PUT/DELETE /admin/system/role/*` - 角色管理
+- `GET/POST/PUT/DELETE /admin/system/menu/*` - 菜单管理
+- `GET/POST/PUT/DELETE /admin/system/dept/*` - 部门管理
+- `GET/POST/PUT/DELETE /admin/system/config/*` - 配置管理
+- `GET/DELETE /admin/system/operation-log/*` - 操作日志
+
+> 前端通过 Vite 代理 `/api` → `/admin`
 
 ## 权限说明
 
 系统采用 Casbin RBAC 模型：
-- **super** 角色：超级管理员，自动拥有所有权限
+- **super** 角色：超级管理员，Casbin 和菜单/权限码全部绕过
 - **admin** 角色：可读写系统管理模块
 - **user** 角色：仅可查看基础信息
 
@@ -161,4 +209,3 @@ go get gorm.io/driver/mysql
 # 或
 go get gorm.io/driver/postgres
 ```
-# base

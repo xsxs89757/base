@@ -1,0 +1,13 @@
+server:
+  port: 8080
+  mode: development          # development / production
+  enable_swagger: true       # 生产环境设置为 false
+
+database:
+  driver: sqlite
+  dsn: "./data.db"
+
+jwt:
+  secret: "change-this-to-a-strong-secret"
+  expire: 168h               # 7 days
+  refresh_expire: 720h       # 30 days
