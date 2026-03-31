@@ -12,6 +12,7 @@ Thumbs.db
 *.sw?
 .history
 .cursor
+!.cursor/rules/
 .claude
 
 # Go

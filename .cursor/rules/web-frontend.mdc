@@ -1,0 +1,43 @@
+---
+description: Vben Admin 前端开发规范
+globs: web/**/*.{vue,ts,tsx}
+alwaysApply: false
+---
+
+# Vben Admin 前端规范
+
+## 文档参考
+
+Vben Admin v5 文档: https://doc.vvbin.cn/
+遇到组件用法、路由配置、权限控制等问题时优先查阅官方文档。
+
+## 项目结构 (web/apps/web-antd/src/)
+
+- `api/` - API 接口定义 (requestClient)
+- `views/` - 页面组件
+- `router/` - 路由配置
+- `adapter/` - 组件适配器 (form, vxe-table)
+- `locales/langs/` - 国际化 (zh-CN/, en-US/)
+
+## 系统管理页面模式
+
+每个模块包含:
+- `list.vue` - 列表页 (useVbenVxeGrid)
+- `modules/form.vue` - 表单抽屉 (useVbenDrawer + useVbenForm)
+- `data.ts` - schema 定义 (useFormSchema, useGridFormSchema, useColumns)
+
+## 表单注意事项
+
+- 使用 `destroyOnClose: true` 的 Drawer 中，新增和编辑都必须调用 `formApi.setValues()`，否则 Select 等组件不会正确初始化
+- 下拉选项通过 `formApi.updateSchema()` 设置 options，不要依赖 ApiSelect
+- Switch 组件需设置 `checkedValue: 1, unCheckedValue: 0` 映射整数
+
+## 国际化
+
+所有文本必须支持中英文，使用 `$t('system.xxx.yyy')` 引用。翻译文件:
+- `locales/langs/zh-CN/system.json`
+- `locales/langs/en-US/system.json`
+
+## API 代理
+
+Vite 代理 `/api` → `/admin` (后端实际路径)

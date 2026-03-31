@@ -1,0 +1,38 @@
+---
+description: Go 后端开发规范
+globs: server/**/*.go
+alwaysApply: false
+---
+
+# Go 后端规范
+
+## 分层结构
+
+model → dto → validator → service → handler → router → swag init
+
+- `internal/model/admin/` - GORM 数据模型
+- `internal/dto/admin/` - 请求/响应 DTO
+- `internal/validator/admin/` - 请求验证规则
+- `internal/service/admin/` - 业务逻辑
+- `internal/handler/admin/` - HTTP 处理器 + Swagger 注解
+- `internal/router/` - 路由注册
+- `internal/middleware/` - JWT, Casbin, 操作日志
+
+## Swagger 注解
+
+每个 handler 必须包含: @Summary, @Tags, @Accept, @Produce, @Param, @Success, @Router
+
+Tags 命名规范:
+- 后台: `认证`, `用户`, `系统管理 - 角色` 等
+- 前台 (将来): `前台 - xxx`
+
+生成命令: `swag init -g main.go -o docs --parseDependency`
+
+## 响应格式
+
+统一使用 `dto.Response`: `dto.Success(c, data)` / `dto.Fail(c, code, msg)` / `dto.PageSuccess(c, items, total)`
+
+## 命名
+
+- 文件: 小写下划线 `operation_log.go`
+- 结构体/方法: 大驼峰 `GetUserList()`

@@ -1,0 +1,30 @@
+---
+description: 项目整体架构和开发规范
+alwaysApply: true
+---
+
+# 项目概述
+
+Go Fiber + Vben Admin v5 全栈后台管理系统。
+
+- 后端: Go Fiber v2, GORM (SQLite), Casbin v3 (RBAC), JWT, Swagger
+- 前端: Vue 3, Vben Admin v5 (Ant Design Vue), Vite, TypeScript, Pinia
+
+## 目录结构
+
+- `server/` - Go 后端
+- `web/` - Vben Admin 前端 (apps/web-antd/)
+- `dev.sh` - 开发启动 (air 热更新)
+- `deploy.sh` - 一键部署 (server/web/all)
+
+## 超级管理员
+
+id=1 的用户为超级管理员，不受任何权限限制，不出现在用户列表，不可被修改或删除。
+
+## Git 提交规范
+
+Conventional Commits: feat/fix/docs/refactor/chore
+
+## 不要提交的文件
+
+server/config.yaml, server/config.prod.yaml, server/docs/, .deploy.env, .cursor/, .claude/
