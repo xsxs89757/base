@@ -1,24 +1,47 @@
 package store
 
 import (
+	"fmt"
 	"log"
 
 	"base/config"
 	adminmodel "base/internal/model/admin"
 
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/driver/mysql"
+	"gorm.io/driver/postgres"
 	"gorm.io/driver/sqlite"
+	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
 )
 
 var DB *gorm.DB
 
+func dialector(driver, dsn string) (gorm.Dialector, error) {
+	switch driver {
+	case "sqlite", "sqlite3", "":
+		return sqlite.Open(dsn), nil
+	case "mysql":
+		return mysql.Open(dsn), nil
+	case "postgres", "postgresql":
+		return postgres.Open(dsn), nil
+	case "sqlserver", "mssql":
+		return sqlserver.Open(dsn), nil
+	default:
+		return nil, fmt.Errorf("unsupported database driver: %s", driver)
+	}
+}
+
 func Init() {
-	var err error
 	cfg := config.C.Database
 
-	DB, err = gorm.Open(sqlite.Open(cfg.DSN), &gorm.Config{
+	dial, err := dialector(cfg.Driver, cfg.DSN)
+	if err != nil {
+		log.Fatalf("database config error: %v", err)
+	}
+
+	DB, err = gorm.Open(dial, &gorm.Config{
 		Logger: logger.Default.LogMode(logger.Warn),
 	})
 	if err != nil {

@@ -13,6 +13,15 @@ WEB_DIR="$ROOT_DIR/web"
 AIR_PID=""
 WEB_PID=""
 
+# 从 config.yaml 读取后端端口（唯一来源）
+CONFIG_FILE="$SERVER_DIR/config.yaml"
+if [ ! -f "$CONFIG_FILE" ]; then
+    echo -e "${RED}config.yaml 不存在，请从 config.yaml.example 复制一份${NC}"
+    exit 1
+fi
+SERVER_PORT=$(grep -E '^\s*port:' "$CONFIG_FILE" | head -1 | awk '{print $2}')
+SERVER_PORT=${SERVER_PORT:-8080}
+
 cleanup() {
     echo ""
     echo -e "${YELLOW}正在关闭服务...${NC}"
@@ -37,7 +46,7 @@ if [ ! -f "$AIR_BIN" ]; then
 fi
 
 # --- 后端 (air 热更新) ---
-echo -e "${YELLOW}[1/2] 启动后端 - air 热更新 (http://localhost:8080)${NC}"
+echo -e "${YELLOW}[1/2] 启动后端 - air 热更新 (http://localhost:${SERVER_PORT})${NC}"
 cd "$SERVER_DIR"
 
 if [ ! -f go.sum ]; then
@@ -73,7 +82,7 @@ if [ ! -d node_modules ]; then
     pnpm install --no-frozen-lockfile
 fi
 
-pnpm dev:antd &
+VITE_API_PORT=$SERVER_PORT pnpm dev:antd &
 WEB_PID=$!
 sleep 3
 
@@ -83,8 +92,8 @@ echo -e "${GREEN}   全部服务已启动！${NC}"
 echo -e "${GREEN}==============================${NC}"
 echo ""
 echo -e "  前端:    ${CYAN}http://localhost:5666${NC}"
-echo -e "  后端:    ${CYAN}http://localhost:8080${NC}"
-echo -e "  Swagger: ${CYAN}http://localhost:8080/swagger/index.html${NC}"
+echo -e "  后端:    ${CYAN}http://localhost:${SERVER_PORT}${NC}"
+echo -e "  Swagger: ${CYAN}http://localhost:${SERVER_PORT}/swagger/index.html${NC}"
 echo ""
 echo -e "  默认账号: ${YELLOW}vben / 123456${NC}"
 echo ""

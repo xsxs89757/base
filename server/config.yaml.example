@@ -7,8 +7,14 @@ server:
   swagger_desc: ""           # 留空使用默认值
 
 database:
-  driver: sqlite
+  driver: sqlite                # sqlite / mysql / postgres / sqlserver
   dsn: "./data.db"
+  # MySQL 示例:
+  #   driver: mysql
+  #   dsn: "user:password@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
+  # PostgreSQL 示例:
+  #   driver: postgres
+  #   dsn: "host=127.0.0.1 user=postgres password=secret dbname=app port=5432 sslmode=disable"
 
 jwt:
   secret: "change-this-to-a-strong-secret"
