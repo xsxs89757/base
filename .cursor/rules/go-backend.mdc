@@ -1,7 +1,7 @@
 ---
 description: Go 后端开发规范
 globs: server/**/*.go
-alwaysApply: false
+alwaysApply: true
 ---
 
 # Go 后端规范
@@ -39,8 +39,10 @@ Tags 命名规范:
 
 ## GORM 注意事项
 
-- 短缩写字段（如 `OID`）必须加 `gorm:"column:oid"` 显式指定列名，否则 GORM 会拆成 `o_id`
-  - 规律：GORM 把 `ID` 当独立单词拆分，单字母+ID 会出错（`OID` → `o_id`）
+- 含连续大写缩写的字段必须加 `gorm:"column:xxx"` 显式指定列名
+  - `OID` → 自动变 `o_id`（期望 `oid`）→ 加 `gorm:"column:oid"`
+  - `AIPDFPath` → 自动变 `a_ip_df_path`（期望 `ai_pdf_path`）→ 加 `gorm:"column:ai_pdf_path"`
+  - 规律：GORM 在连续大写字母间插入下划线，多个缩写连写必出错
   - 正常驼峰不受影响：`FileName` → `file_name`，`UUID` → `uuid`
 - 用 `map[string]any` 做 Updates 时，key 必须与数据库列名一致（snake_case），不是 Go 字段名
 - 改了 model 字段后需要完整重启服务触发 AutoMigrate，air 热重载会自动重启但注意时序
