@@ -11,7 +11,7 @@
 - **JWT** - Token 认证
 - **Swagger/OpenAPI** - API 文档自动生成
 
-### 前端 (web/)
+### 前端 (admin/)
 - **Vue 3** + **TypeScript**
 - **Vben Admin v5** (Ant Design Vue 版本)
 - **Vite 7**
@@ -50,7 +50,7 @@ go run main.go
 
 **前端：**
 ```bash
-cd web
+cd admin
 pnpm install
 pnpm dev:antd
 ```
@@ -95,7 +95,7 @@ pnpm dev:antd
 │       ├── store/               # 数据库初始化 & 种子数据
 │       └── validator/           # 请求验证
 │
-└── web/                         # Vben Admin 前端
+└── admin/                       # Vben Admin 后台前端
     ├── apps/
     │   └── web-antd/            # Ant Design Vue 应用
     │       └── src/
@@ -121,7 +121,7 @@ cp .deploy.env.example .deploy.env
 ```bash
 ./deploy.sh all      # 全量部署 (默认)
 ./deploy.sh server   # 仅部署后端
-./deploy.sh web      # 仅部署前端
+./deploy.sh admin    # 仅部署后台前端
 ```
 
 部署脚本会：

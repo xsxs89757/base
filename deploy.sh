@@ -9,24 +9,25 @@ NC='\033[0m'
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$ROOT_DIR/server"
-WEB_DIR="$ROOT_DIR/web"
+ADMIN_DIR="$ROOT_DIR/admin"
 BUILD_DIR="$ROOT_DIR/.build"
 
 # -------------------------------------------------------
 # 使用说明
 # -------------------------------------------------------
 usage() {
-    echo -e "${CYAN}用法: ./deploy.sh [server|web|all]${NC}"
+    echo -e "${CYAN}用法: ./deploy.sh [server|admin|all]${NC}"
     echo ""
     echo "  server  - 仅部署后端"
-    echo "  web     - 仅部署前端"
+    echo "  admin   - 仅部署后台前端"
     echo "  all     - 全量部署 (默认)"
     exit 0
 }
 
 DEPLOY_MODE="${1:-all}"
 case "$DEPLOY_MODE" in
-    server|web|all) ;;
+    server|admin|all) ;;
+    web) DEPLOY_MODE="admin" ;;
     -h|--help|help) usage ;;
     *) echo -e "${RED}未知模式: $DEPLOY_MODE${NC}"; usage ;;
 esac
@@ -45,7 +46,10 @@ fi
 
 source "$ENV_FILE"
 
-for var in SSH_HOST SSH_USER SSH_PASS REMOTE_SERVER_DIR REMOTE_WEB_DIR; do
+REMOTE_ADMIN_DIR="${REMOTE_ADMIN_DIR:-${REMOTE_WEB_DIR:-}}"
+ADMIN_BUILD_CMD="${ADMIN_BUILD_CMD:-${WEB_BUILD_CMD:-pnpm build:antd}}"
+
+for var in SSH_HOST SSH_USER SSH_PASS REMOTE_SERVER_DIR REMOTE_ADMIN_DIR; do
     if [ -z "${!var}" ]; then
         echo -e "${RED}配置项 $var 未设置，请检查 .deploy.env${NC}"
         exit 1
@@ -56,7 +60,6 @@ SSH_PORT="${SSH_PORT:-22}"
 AUTO_RESTART="${AUTO_RESTART:-no}"
 SERVICE_NAME="${SERVICE_NAME:-admin-server}"
 SERVER_BIN_NAME="${SERVER_BIN_NAME:-server}"
-WEB_BUILD_CMD="${WEB_BUILD_CMD:-pnpm build:antd}"
 
 # 检测 sshpass
 if ! command -v sshpass &>/dev/null; then
@@ -101,11 +104,11 @@ echo ""
 echo -e "  部署模式:   ${YELLOW}${DEPLOY_MODE}${NC}"
 echo -e "  目标主机:   ${YELLOW}${SSH_USER}@${SSH_HOST}:${SSH_PORT}${NC}"
 echo -e "  远程系统:   ${YELLOW}${TARGET_OS}/${TARGET_ARCH}${NC}"
-if [ "$DEPLOY_MODE" != "web" ]; then
+if [ "$DEPLOY_MODE" != "admin" ]; then
 echo -e "  后端目录:   ${YELLOW}${REMOTE_SERVER_DIR}${NC}"
 fi
 if [ "$DEPLOY_MODE" != "server" ]; then
-echo -e "  前端目录:   ${YELLOW}${REMOTE_WEB_DIR}${NC}"
+echo -e "  前端目录:   ${YELLOW}${REMOTE_ADMIN_DIR}${NC}"
 fi
 echo ""
 
@@ -182,31 +185,31 @@ UNIT"
 # -------------------------------------------------------
 # 打包前端
 # -------------------------------------------------------
-deploy_web() {
+deploy_admin() {
     echo -e "${YELLOW}[前端] 打包构建...${NC}"
-    cd "$WEB_DIR"
+    cd "$ADMIN_DIR"
 
     if [ ! -d node_modules ]; then
         echo -e "        安装依赖..."
         pnpm install --no-frozen-lockfile
     fi
 
-    eval "$WEB_BUILD_CMD"
+    eval "$ADMIN_BUILD_CMD"
 
-    DIST_DIR="$WEB_DIR/apps/web-antd/dist"
+    DIST_DIR="$ADMIN_DIR/apps/web-antd/dist"
     if [ ! -d "$DIST_DIR" ]; then
         echo -e "${RED}前端打包输出目录不存在: $DIST_DIR${NC}"
         exit 1
     fi
 
     cd "$DIST_DIR"
-    tar -czf "$BUILD_DIR/web.tar.gz" .
+    tar -czf "$BUILD_DIR/admin.tar.gz" .
     echo -e "${GREEN}        打包完成${NC}"
 
     echo -e "${YELLOW}[前端] 上传到服务器...${NC}"
-    ssh_run "mkdir -p ${REMOTE_WEB_DIR}"
-    scp_to "$BUILD_DIR/web.tar.gz" "/tmp/web.tar.gz"
-    ssh_run "rm -rf ${REMOTE_WEB_DIR}/* && tar -xzf /tmp/web.tar.gz -C ${REMOTE_WEB_DIR} && rm -f /tmp/web.tar.gz"
+    ssh_run "mkdir -p ${REMOTE_ADMIN_DIR}"
+    scp_to "$BUILD_DIR/admin.tar.gz" "/tmp/admin.tar.gz"
+    ssh_run "rm -rf ${REMOTE_ADMIN_DIR}/* && tar -xzf /tmp/admin.tar.gz -C ${REMOTE_ADMIN_DIR} && rm -f /tmp/admin.tar.gz"
     echo -e "${GREEN}        上传完成${NC}"
 }
 
@@ -215,8 +218,8 @@ deploy_web() {
 # -------------------------------------------------------
 case "$DEPLOY_MODE" in
     server) deploy_server ;;
-    web)    deploy_web ;;
-    all)    deploy_server; deploy_web ;;
+    admin)  deploy_admin ;;
+    all)    deploy_server; deploy_admin ;;
 esac
 
 rm -rf "$BUILD_DIR"

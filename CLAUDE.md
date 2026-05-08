@@ -194,7 +194,7 @@ air                            # 热重载开发
 
 ### 前端
 ```bash
-cd web
+cd admin
 pnpm install                   # 安装依赖
 pnpm dev:antd                  # 启动开发服务器
 pnpm build:antd                # 构建生产版本

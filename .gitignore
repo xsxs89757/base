@@ -30,6 +30,7 @@ server/docs
 
 # Node / Frontend
 node_modules
+.pnpm-store
 dist
 dist-ssr
 dist.zip

@@ -9,9 +9,9 @@ NC='\033[0m'
 
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$ROOT_DIR/server"
-WEB_DIR="$ROOT_DIR/web"
+ADMIN_DIR="$ROOT_DIR/admin"
 AIR_PID=""
-WEB_PID=""
+ADMIN_PID=""
 
 # 从 config.yaml 读取后端端口（唯一来源）
 CONFIG_FILE="$SERVER_DIR/config.yaml"
@@ -26,7 +26,7 @@ cleanup() {
     echo ""
     echo -e "${YELLOW}正在关闭服务...${NC}"
     [ -n "$AIR_PID" ] && kill "$AIR_PID" 2>/dev/null && echo -e "${GREEN}后端已停止${NC}"
-    [ -n "$WEB_PID" ] && kill "$WEB_PID" 2>/dev/null && echo -e "${GREEN}前端已停止${NC}"
+    [ -n "$ADMIN_PID" ] && kill "$ADMIN_PID" 2>/dev/null && echo -e "${GREEN}前端已停止${NC}"
     pkill -P $$ 2>/dev/null
     exit 0
 }
@@ -75,7 +75,7 @@ echo -e "${GREEN}      后端启动成功 (air PID: $AIR_PID)${NC}"
 
 # --- 前端 ---
 echo -e "${YELLOW}[2/2] 启动前端 (http://localhost:5666)${NC}"
-cd "$WEB_DIR"
+cd "$ADMIN_DIR"
 
 if [ ! -d node_modules ]; then
     echo -e "${YELLOW}      安装前端依赖...${NC}"
@@ -83,7 +83,7 @@ if [ ! -d node_modules ]; then
 fi
 
 VITE_API_PORT=$SERVER_PORT pnpm dev:antd &
-WEB_PID=$!
+ADMIN_PID=$!
 sleep 3
 
 echo ""

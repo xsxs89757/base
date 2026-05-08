@@ -557,6 +557,9 @@ importers:
       cspell:
         specifier: 'catalog:'
         version: 9.6.4
+      cssnano:
+        specifier: 'catalog:'
+        version: 7.1.2(postcss@8.5.6)
       happy-dom:
         specifier: 'catalog:'
         version: 17.6.3
