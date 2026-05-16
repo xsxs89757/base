@@ -3,6 +3,7 @@ package store
 import (
 	"fmt"
 	"log"
+	"strings"
 
 	"base/config"
 	adminmodel "base/internal/model/admin"
@@ -19,18 +20,22 @@ import (
 var DB *gorm.DB
 
 func dialector(driver, dsn string) (gorm.Dialector, error) {
-	switch driver {
+	switch normalizeDriver(driver) {
 	case "sqlite", "sqlite3", "":
 		return sqlite.Open(dsn), nil
-	case "mysql":
+	case "mysql", "mariadb":
 		return mysql.Open(dsn), nil
-	case "postgres", "postgresql":
+	case "postgres", "postgresql", "pgsql":
 		return postgres.Open(dsn), nil
 	case "sqlserver", "mssql":
 		return sqlserver.Open(dsn), nil
 	default:
-		return nil, fmt.Errorf("unsupported database driver: %s", driver)
+		return nil, fmt.Errorf("unsupported database driver %q, supported drivers: sqlite, mysql, postgres, sqlserver", driver)
 	}
+}
+
+func normalizeDriver(driver string) string {
+	return strings.ToLower(strings.TrimSpace(driver))
 }
 
 func Init() {

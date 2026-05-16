@@ -201,11 +201,11 @@ database:
 database:
   driver: postgres
   dsn: "host=localhost user=postgres password=postgres dbname=admin port=5432 sslmode=disable"
+
+# SQL Server
+database:
+  driver: sqlserver
+  dsn: "sqlserver://user:password@localhost:1433?database=admin"
 ```
 
-需要同时安装对应的 GORM 驱动：
-```bash
-go get gorm.io/driver/mysql
-# 或
-go get gorm.io/driver/postgres
-```
+项目已内置 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server 对应的 GORM 驱动，无需额外 `go get`。
