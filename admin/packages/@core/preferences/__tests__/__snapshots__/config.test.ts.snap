@@ -3,7 +3,7 @@
 exports[`defaultPreferences immutability test > should not modify the config object 1`] = `
 {
   "app": {
-    "accessMode": "frontend",
+    "accessMode": "backend",
     "authPageLayout": "panel-right",
     "checkUpdatesInterval": 1,
     "colorGrayMode": false,

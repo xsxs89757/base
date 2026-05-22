@@ -7,8 +7,9 @@ export namespace SystemRoleApi {
     [key: string]: any;
     code: string;
     id: string;
+    menuIds?: number[];
     name: string;
-    permissions: string[];
+    permissions: number[];
     remark?: string;
     status: 0 | 1;
   }
@@ -54,9 +55,7 @@ async function deleteRole(id: string) {
 }
 
 async function getAllRoles() {
-  return requestClient.get<Array<SystemRoleApi.SystemRole>>(
-    '/system/role/all',
-  );
+  return requestClient.get<Array<SystemRoleApi.SystemRole>>('/system/role/all');
 }
 
 export { createRole, deleteRole, getAllRoles, getRoleList, updateRole };

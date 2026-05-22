@@ -54,7 +54,11 @@ export function useGridFormSchema(): VbenFormSchema[] {
       fieldName: 'name',
       label: $t('system.role.roleName'),
     },
-    { component: 'Input', fieldName: 'code', label: $t('system.role.roleCode') },
+    {
+      component: 'Input',
+      fieldName: 'code',
+      label: $t('system.role.roleCode'),
+    },
     {
       component: 'Select',
       componentProps: {
@@ -97,7 +101,7 @@ export function useColumns<T = SystemRoleApi.SystemRole>(
     },
     {
       cellRender: {
-        attrs: { beforeChange: onStatusChange },
+        attrs: { authCode: 'System:Role:Edit', beforeChange: onStatusChange },
         name: onStatusChange ? 'CellSwitch' : 'CellTag',
       },
       field: 'status',
@@ -123,6 +127,10 @@ export function useColumns<T = SystemRoleApi.SystemRole>(
           onClick: onActionClick,
         },
         name: 'CellOperation',
+        options: [
+          { authCode: 'System:Role:Edit', code: 'edit' },
+          { authCode: 'System:Role:Delete', code: 'delete' },
+        ],
       },
       field: 'operation',
       fixed: 'right',

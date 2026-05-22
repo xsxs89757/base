@@ -2,11 +2,23 @@ package admin
 
 // CreateRoleRequest 创建/更新角色请求
 type CreateRoleRequest struct {
-	Name    string `json:"name" validate:"required" example:"新角色"`
-	Code    string `json:"code" validate:"required" example:"new_role"`
-	Status  int    `json:"status" validate:"oneof=0 1" example:"1"`
-	Remark  string `json:"remark"`
-	MenuIDs []uint `json:"menuIds"`
+	Name        string `json:"name" validate:"required" example:"新角色"`
+	Code        string `json:"code" validate:"required" example:"new_role"`
+	Status      int    `json:"status" validate:"oneof=0 1" example:"1"`
+	Remark      string `json:"remark"`
+	MenuIDs     []uint `json:"menuIds"`
+	Permissions []uint `json:"permissions"`
+}
+
+func (r CreateRoleRequest) GrantedMenuIDs() []uint {
+	if r.MenuIDs != nil {
+		return r.MenuIDs
+	}
+	return r.Permissions
+}
+
+func (r CreateRoleRequest) HasGrantedMenuIDs() bool {
+	return r.MenuIDs != nil || r.Permissions != nil
 }
 
 // RoleItem 角色列表项

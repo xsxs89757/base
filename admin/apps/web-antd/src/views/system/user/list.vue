@@ -57,9 +57,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
   } as VxeTableGridOptions<SystemUserApi.SystemUser>,
 });
 
-function onActionClick(
-  e: OnActionClickParams<SystemUserApi.SystemUser>,
-) {
+function onActionClick(e: OnActionClickParams<SystemUserApi.SystemUser>) {
   switch (e.code) {
     case 'delete': {
       onDelete(e.row);
@@ -86,7 +84,7 @@ async function onStatusChange(
         title: '切换状态',
       });
     });
-    await updateUser(row.id, { status: newStatus });
+    await updateUser(row.id, { ...row, status: newStatus });
     return true;
   } catch {
     return false;
@@ -129,7 +127,11 @@ function onCreate() {
     <FormDrawer @success="onRefresh" />
     <Grid :table-title="$t('system.user.list')">
       <template #toolbar-tools>
-        <Button type="primary" @click="onCreate">
+        <Button
+          v-access:code="'System:User:Create'"
+          type="primary"
+          @click="onCreate"
+        >
           <Plus class="size-5" />
           {{ $t('ui.actionTitle.create', [$t('system.user.name')]) }}
         </Button>

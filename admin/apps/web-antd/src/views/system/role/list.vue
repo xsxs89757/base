@@ -111,7 +111,7 @@ async function onStatusChange(
       `你要将${row.name}的状态切换为 【${status[newStatus.toString()]}】 吗？`,
       `切换状态`,
     );
-    await updateRole(row.id, { status: newStatus });
+    await updateRole(row.id, { ...row, status: newStatus });
     return true;
   } catch {
     return false;
@@ -154,7 +154,11 @@ function onCreate() {
     <FormDrawer @success="onRefresh" />
     <Grid :table-title="$t('system.role.list')">
       <template #toolbar-tools>
-        <Button type="primary" @click="onCreate">
+        <Button
+          v-access:code="'System:Role:Create'"
+          type="primary"
+          @click="onCreate"
+        >
           <Plus class="size-5" />
           {{ $t('ui.actionTitle.create', [$t('system.role.name')]) }}
         </Button>

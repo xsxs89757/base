@@ -119,9 +119,10 @@ func CreateRole(c *fiber.Ctx) error {
 		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create role: "+err.Error())
 	}
 
-	if len(req.MenuIDs) > 0 {
+	menuIDs := req.GrantedMenuIDs()
+	if len(menuIDs) > 0 {
 		var menus []adminmodel.Menu
-		store.DB.Where("id IN ?", req.MenuIDs).Find(&menus)
+		store.DB.Where("id IN ?", menuIDs).Find(&menus)
 		store.DB.Model(&role).Association("Menus").Replace(menus)
 	}
 
@@ -155,11 +156,13 @@ func UpdateRole(c *fiber.Ctx) error {
 	}
 	store.DB.Model(&adminmodel.Role{}).Where("id = ?", id).Updates(updates)
 
-	if req.MenuIDs != nil {
+	if req.HasGrantedMenuIDs() {
 		var role adminmodel.Role
 		store.DB.First(&role, id)
 		var menus []adminmodel.Menu
-		store.DB.Where("id IN ?", req.MenuIDs).Find(&menus)
+		if menuIDs := req.GrantedMenuIDs(); len(menuIDs) > 0 {
+			store.DB.Where("id IN ?", menuIDs).Find(&menus)
+		}
 		store.DB.Model(&role).Association("Menus").Replace(menus)
 	}
 

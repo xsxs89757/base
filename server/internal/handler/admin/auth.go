@@ -7,7 +7,9 @@ import (
 	"base/internal/dto"
 	admindto "base/internal/dto/admin"
 	"base/internal/middleware"
+	adminmodel "base/internal/model/admin"
 	adminsvc "base/internal/service/admin"
+	"base/internal/store"
 	"base/internal/validator"
 
 	"github.com/gofiber/fiber/v2"
@@ -61,7 +63,7 @@ func Login(c *fiber.Ctx) error {
 		"realName":    user.RealName,
 		"avatar":      user.Avatar,
 		"roles":       roles,
-		"homePath":    user.HomePath,
+		"homePath":    resolveAccessibleHomePath(user),
 		"accessToken": accessToken,
 	})
 }
@@ -198,6 +200,46 @@ func GetUserInfo(c *fiber.Ctx) error {
 		"realName": user.RealName,
 		"avatar":   user.Avatar,
 		"roles":    roles,
-		"homePath": user.HomePath,
+		"homePath": resolveAccessibleHomePath(user),
 	})
+}
+
+func resolveAccessibleHomePath(user *adminmodel.User) string {
+	if user.ID == 1 {
+		return user.HomePath
+	}
+
+	roleIDs := make([]uint, 0, len(user.Roles))
+	for _, role := range user.Roles {
+		roleIDs = append(roleIDs, role.ID)
+	}
+	if len(roleIDs) == 0 {
+		return user.HomePath
+	}
+
+	if user.HomePath != "" {
+		var count int64
+		store.DB.Model(&adminmodel.Menu{}).
+			Joins("JOIN role_menus ON role_menus.menu_id = sys_menus.id").
+			Joins("JOIN sys_roles ON sys_roles.id = role_menus.role_id").
+			Where("role_menus.role_id IN ? AND sys_roles.status = ? AND sys_roles.deleted_at IS NULL", roleIDs, 1).
+			Where("sys_menus.path = ? AND sys_menus.type IN ? AND sys_menus.status = ?", user.HomePath, []string{"menu", "embedded", "link"}, 1).
+			Count(&count)
+		if count > 0 {
+			return user.HomePath
+		}
+	}
+
+	var menu adminmodel.Menu
+	if err := store.DB.
+		Joins("JOIN role_menus ON role_menus.menu_id = sys_menus.id").
+		Joins("JOIN sys_roles ON sys_roles.id = role_menus.role_id").
+		Where("role_menus.role_id IN ? AND sys_roles.status = ? AND sys_roles.deleted_at IS NULL", roleIDs, 1).
+		Where("sys_menus.path <> '' AND sys_menus.type IN ? AND sys_menus.status = ?", []string{"menu", "embedded", "link"}, 1).
+		Order("sys_menus.order_no ASC, sys_menus.id ASC").
+		First(&menu).Error; err == nil {
+		return menu.Path
+	}
+
+	return user.HomePath
 }

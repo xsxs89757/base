@@ -98,7 +98,12 @@ function onClear() {
   <Page auto-content-height>
     <Grid :table-title="$t('system.operationLog.list')">
       <template #toolbar-tools>
-        <Button danger type="primary" @click="onClear">
+        <Button
+          v-access:code="'System:OperationLog:Delete'"
+          danger
+          type="primary"
+          @click="onClear"
+        >
           <Trash2 class="size-4" />
           {{ $t('system.operationLog.clear') }}
         </Button>

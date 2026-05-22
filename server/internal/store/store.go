@@ -213,7 +213,7 @@ func refreshRoleMenus() {
 
 	if DB.Where("code = ?", "admin").First(&adminRole).Error == nil {
 		var adminMenus []adminmodel.Menu
-		DB.Where("type != ?", "button").Find(&adminMenus)
+		DB.Find(&adminMenus)
 		DB.Model(&adminRole).Association("Menus").Replace(adminMenus)
 		log.Println("  [seed] admin role menus refreshed")
 	}

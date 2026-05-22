@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"sort"
 	"strconv"
 
 	"base/internal/dto"
@@ -47,6 +48,7 @@ func GetAllMenus(c *fiber.Ctx) error {
 			Order("sys_menus.order_no ASC").
 			Distinct().
 			Find(&menus)
+		menus = includeMenuAncestors(menus)
 	}
 
 	tree := buildMenuTree(menus, 0)
@@ -224,6 +226,52 @@ func buildMenuTree(menus []adminmodel.Menu, parentID uint) []fiber.Map {
 		}
 	}
 	return tree
+}
+
+func includeMenuAncestors(menus []adminmodel.Menu) []adminmodel.Menu {
+	if len(menus) == 0 {
+		return menus
+	}
+
+	var allMenus []adminmodel.Menu
+	store.DB.Where("type != ? AND status = ?", "button", 1).Find(&allMenus)
+
+	allByID := make(map[uint]adminmodel.Menu, len(allMenus))
+	for _, menu := range allMenus {
+		allByID[menu.ID] = menu
+	}
+
+	selectedByID := make(map[uint]adminmodel.Menu, len(menus))
+	for _, menu := range menus {
+		selectedByID[menu.ID] = menu
+	}
+
+	for _, menu := range menus {
+		visited := map[uint]bool{}
+		for parentID := menu.ParentID; parentID != 0 && !visited[parentID]; {
+			visited[parentID] = true
+			parent, ok := allByID[parentID]
+			if !ok {
+				break
+			}
+			if _, exists := selectedByID[parent.ID]; !exists {
+				selectedByID[parent.ID] = parent
+			}
+			parentID = parent.ParentID
+		}
+	}
+
+	result := make([]adminmodel.Menu, 0, len(selectedByID))
+	for _, menu := range selectedByID {
+		result = append(result, menu)
+	}
+	sort.SliceStable(result, func(i, j int) bool {
+		if result[i].OrderNo == result[j].OrderNo {
+			return result[i].ID < result[j].ID
+		}
+		return result[i].OrderNo < result[j].OrderNo
+	})
+	return result
 }
 
 func buildMenuTreeForManage(menus []adminmodel.Menu, parentID uint) []fiber.Map {

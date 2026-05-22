@@ -99,7 +99,7 @@ export function useColumns(
           onClick: onActionClick,
         },
         name: 'CellOperation',
-        options: ['delete'],
+        options: [{ authCode: 'System:OperationLog:Delete', code: 'delete' }],
       },
       field: 'operation',
       fixed: 'right',

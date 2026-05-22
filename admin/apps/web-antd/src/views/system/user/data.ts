@@ -116,7 +116,7 @@ export function useColumns<T = SystemUserApi.SystemUser>(
     },
     {
       cellRender: {
-        attrs: { beforeChange: onStatusChange },
+        attrs: { authCode: 'System:User:Edit', beforeChange: onStatusChange },
         name: onStatusChange ? 'CellSwitch' : 'CellTag',
       },
       field: 'status',
@@ -144,6 +144,10 @@ export function useColumns<T = SystemUserApi.SystemUser>(
           onClick: onActionClick,
         },
         name: 'CellOperation',
+        options: [
+          { authCode: 'System:User:Edit', code: 'edit' },
+          { authCode: 'System:User:Delete', code: 'delete' },
+        ],
       },
       field: 'operation',
       fixed: 'right',

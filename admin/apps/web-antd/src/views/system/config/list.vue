@@ -23,7 +23,7 @@ import {
 } from '#/api/system/config';
 import { $t } from '#/locales';
 
-import { useColumns, useGridFormSchema } from './data';
+import { useColumns } from './data';
 import Form from './modules/form.vue';
 
 const groupOptions = ref<Array<{ label: string; value: string }>>([]);
@@ -95,9 +95,7 @@ const [Grid, gridApi] = useVbenVxeGrid({
   } as VxeTableGridOptions<SystemConfigApi.SystemConfig>,
 });
 
-function onActionClick(
-  e: OnActionClickParams<SystemConfigApi.SystemConfig>,
-) {
+function onActionClick(e: OnActionClickParams<SystemConfigApi.SystemConfig>) {
   switch (e.code) {
     case 'delete': {
       onDelete(e.row);
@@ -124,7 +122,7 @@ async function onStatusChange(
         title: '切换状态',
       });
     });
-    await updateConfig(row.id, { status: newStatus });
+    await updateConfig(row.id, { ...row, status: newStatus });
     return true;
   } catch {
     return false;
@@ -183,7 +181,11 @@ onMounted(() => {
     <FormDrawer @success="onRefresh" />
     <Grid :table-title="$t('system.config.list')">
       <template #toolbar-tools>
-        <Button type="primary" @click="onCreate">
+        <Button
+          v-access:code="'System:Config:Create'"
+          type="primary"
+          @click="onCreate"
+        >
           <Plus class="size-5" />
           {{ $t('ui.actionTitle.create', [$t('system.config.name')]) }}
         </Button>

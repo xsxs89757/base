@@ -5,6 +5,7 @@ import type { ComponentType } from './component';
 
 import { h } from 'vue';
 
+import { useAccess } from '@vben/access';
 import { IconifyIcon } from '@vben/icons';
 import { $te } from '@vben/locales';
 import {
@@ -19,6 +20,13 @@ import { Button, Image, Popconfirm, Switch, Tag } from 'ant-design-vue';
 import { $t } from '#/locales';
 
 import { useVbenForm } from './form';
+
+function toAuthCodeList(value: unknown): string[] {
+  if (!value) {
+    return [];
+  }
+  return Array.isArray(value) ? value.filter(Boolean) : [String(value)];
+}
 
 setupVbenVxeTable({
   configVxeTable: (vxeUI) => {
@@ -96,6 +104,8 @@ setupVbenVxeTable({
 
     vxeUI.renderer.add('CellSwitch', {
       renderTableDefault({ attrs, props }, { column, row }) {
+        const { hasAccessByCodes } = useAccess();
+        const authCodes = toAuthCodeList(attrs?.authCode ?? attrs?.access);
         const loadingKey = `__loading_${column.field}`;
         const finallyProps = {
           checkedChildren: $t('common.enabled'),
@@ -104,6 +114,9 @@ setupVbenVxeTable({
           unCheckedValue: 0,
           ...props,
           checked: row[column.field],
+          disabled:
+            props?.disabled ||
+            (authCodes.length > 0 && !hasAccessByCodes(authCodes)),
           loading: row[loadingKey] ?? false,
           'onUpdate:checked': onChange,
         };
@@ -172,14 +185,23 @@ setupVbenVxeTable({
             });
             return optBtn;
           })
-          .filter((opt) => opt.show !== false);
+          .filter((opt) => opt.show !== false)
+          .filter((opt) => {
+            const authCodes = toAuthCodeList(opt.authCode ?? opt.access);
+            if (authCodes.length === 0) {
+              return true;
+            }
+            const { hasAccessByCodes } = useAccess();
+            return hasAccessByCodes(authCodes);
+          });
 
         function renderBtn(opt: Recordable<any>, listen = true) {
+          const buttonProps = objectOmit(opt, ['access', 'authCode', 'show']);
           return h(
             Button,
             {
               ...props,
-              ...opt,
+              ...buttonProps,
               icon: undefined,
               onClick: listen
                 ? () =>
@@ -206,6 +228,11 @@ setupVbenVxeTable({
 
         function renderConfirm(opt: Recordable<any>) {
           let viewportWrapper: HTMLElement | null = null;
+          const popconfirmProps = objectOmit(opt, [
+            'access',
+            'authCode',
+            'show',
+          ]);
           return h(
             Popconfirm,
             {
@@ -216,7 +243,7 @@ setupVbenVxeTable({
               placement: 'topLeft',
               title: $t('ui.actionTitle.delete', [attrs?.nameTitle || '']),
               ...props,
-              ...opt,
+              ...popconfirmProps,
               icon: undefined,
               onOpenChange: (open: boolean) => {
                 if (open) {

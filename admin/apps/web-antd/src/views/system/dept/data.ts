@@ -112,11 +112,13 @@ export function useColumns(
         name: 'CellOperation',
         options: [
           {
+            authCode: 'System:Dept:Create',
             code: 'append',
             text: '新增下级',
           },
-          'edit', // 默认的编辑按钮
+          { authCode: 'System:Dept:Edit', code: 'edit' },
           {
+            authCode: 'System:Dept:Delete',
             code: 'delete', // 默认的删除按钮
             disabled: (row: SystemDeptApi.SystemDept) => {
               return !!(row.children && row.children.length > 0);
