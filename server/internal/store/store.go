@@ -170,28 +170,19 @@ func seedMenus() {
 
 	newMenuCreated := false
 	for _, d := range defs {
-		var exists adminmodel.Menu
-		if DB.Where("name = ?", d.Name).First(&exists).Error == nil {
-			continue
+		menu, created := syncSeedMenu(d.Menu, d.ParentName)
+		if created {
+			log.Printf("  [seed] menu created: %s", d.Name)
+			newMenuCreated = true
 		}
-		if d.ParentName != "" {
-			var parent adminmodel.Menu
-			if DB.Where("name = ?", d.ParentName).First(&parent).Error == nil {
-				d.Menu.ParentID = parent.ID
-			}
-		}
-		DB.Create(&d.Menu)
-		log.Printf("  [seed] menu created: %s", d.Name)
-		newMenuCreated = true
 
 		for _, btn := range d.Buttons {
-			var btnExists adminmodel.Menu
-			if DB.Where("name = ?", btn.Name).First(&btnExists).Error == nil {
-				continue
+			btn.ParentID = menu.ID
+			_, created := syncSeedMenu(btn, "")
+			if created {
+				log.Printf("  [seed]   button created: %s", btn.Name)
+				newMenuCreated = true
 			}
-			btn.ParentID = d.Menu.ID
-			DB.Create(&btn)
-			log.Printf("  [seed]   button created: %s", btn.Name)
 		}
 	}
 
@@ -219,16 +210,52 @@ func refreshRoleMenus() {
 	}
 }
 
+func syncSeedMenu(menu adminmodel.Menu, parentName string) (adminmodel.Menu, bool) {
+	if parentName != "" {
+		var parent adminmodel.Menu
+		if DB.Where("name = ?", parentName).First(&parent).Error == nil {
+			menu.ParentID = parent.ID
+		}
+	}
+
+	var exists adminmodel.Menu
+	if DB.Where("name = ?", menu.Name).First(&exists).Error != nil {
+		DB.Create(&menu)
+		return menu, true
+	}
+
+	updates := map[string]any{
+		"parent_id":  menu.ParentID,
+		"path":       menu.Path,
+		"component":  menu.Component,
+		"redirect":   menu.Redirect,
+		"type":       menu.Type,
+		"icon":       menu.Icon,
+		"title":      menu.Title,
+		"auth_code":  menu.AuthCode,
+		"order_no":   menu.OrderNo,
+		"keep_alive": menu.KeepAlive,
+		"affix_tab":  menu.AffixTab,
+		"iframe_src": menu.IframeSrc,
+		"link":       menu.Link,
+	}
+	DB.Model(&exists).Updates(updates)
+	DB.First(&exists, exists.ID)
+	return exists, false
+}
+
 // --- Users ---
 
 func seedUsers() {
+	renameLegacyRootUser()
+
 	userDefs := []struct {
 		Username string
 		RealName string
 		RoleCode string
 		HomePath string
 	}{
-		{"vben", "Vben", "super", ""},
+		{"super", "Super", "super", ""},
 		{"admin", "Admin", "admin", "/workspace"},
 		{"jack", "Jack", "user", "/analytics"},
 	}
@@ -252,6 +279,25 @@ func seedUsers() {
 		DB.Create(&user)
 		log.Printf("  [seed] user created: %s", u.Username)
 	}
+}
+
+func renameLegacyRootUser() {
+	var root adminmodel.User
+	if DB.First(&root, 1).Error != nil || root.Username != "vben" {
+		return
+	}
+
+	var existing adminmodel.User
+	if DB.Where("username = ? AND id != ?", "super", root.ID).First(&existing).Error == nil {
+		log.Println("  [seed] skip legacy root rename: username super already exists")
+		return
+	}
+
+	DB.Model(&root).Updates(map[string]any{
+		"username":  "super",
+		"real_name": "Super",
+	})
+	log.Println("  [seed] root user renamed: vben -> super")
 }
 
 // --- Departments ---

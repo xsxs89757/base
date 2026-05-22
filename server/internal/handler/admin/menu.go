@@ -44,7 +44,7 @@ func GetAllMenus(c *fiber.Ctx) error {
 		}
 		store.DB.
 			Joins("JOIN role_menus ON role_menus.menu_id = sys_menus.id").
-			Where("role_menus.role_id IN ? AND sys_menus.type != ? AND sys_menus.status = ?", roleIDs, "button", 1).
+			Where("role_menus.role_id IN ? AND sys_menus.type IN ? AND sys_menus.status = ?", roleIDs, []string{"menu", "embedded", "link"}, 1).
 			Order("sys_menus.order_no ASC").
 			Distinct().
 			Find(&menus)

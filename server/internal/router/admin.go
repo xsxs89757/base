@@ -39,6 +39,8 @@ func SetupAdmin(app *fiber.App) {
 	// Roles
 	sys.Get("/role/all", admin.GetAllRoles)
 	sys.Get("/role/list", admin.GetRoleList)
+	// 角色管理专用菜单树：不依赖"菜单管理"权限，便于在没有菜单管理权限时仍能完成角色授权
+	sys.Get("/role/menu-tree", admin.GetRoleMenuTree)
 	sys.Post("/role", admin.CreateRole)
 	sys.Put("/role/:id", admin.UpdateRole)
 	sys.Delete("/role/:id", admin.DeleteRole)

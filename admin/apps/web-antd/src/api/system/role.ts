@@ -9,7 +9,9 @@ export namespace SystemRoleApi {
     id: string;
     menuIds?: number[];
     name: string;
-    permissions: number[];
+    // permissions 可选：仅在编辑权限抽屉提交时携带，
+    // 状态切换等场景必须省略以避免覆盖后端已有的菜单关联。
+    permissions?: number[];
     remark?: string;
     status: 0 | 1;
   }
@@ -58,4 +60,23 @@ async function getAllRoles() {
   return requestClient.get<Array<SystemRoleApi.SystemRole>>('/system/role/all');
 }
 
-export { createRole, deleteRole, getAllRoles, getRoleList, updateRole };
+/**
+ * 获取角色授权用的菜单树
+ *
+ * 与 /system/menu/list 解耦，只要拥有 System:Role:List 权限即可调用，
+ * 避免管理员被取消"菜单管理"权限后无法继续维护角色授权。
+ */
+async function getRoleMenuTree() {
+  return requestClient.get<Array<Record<string, any>>>(
+    '/system/role/menu-tree',
+  );
+}
+
+export {
+  createRole,
+  deleteRole,
+  getAllRoles,
+  getRoleList,
+  getRoleMenuTree,
+  updateRole,
+};

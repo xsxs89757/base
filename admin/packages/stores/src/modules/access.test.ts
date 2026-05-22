@@ -43,4 +43,21 @@ describe('useAccessStore', () => {
     store.setAccessRoutes([]);
     expect(store.accessRoutes).toEqual([]);
   });
+
+  it('resets generated access state without clearing the token', () => {
+    const store = useAccessStore();
+    store.setAccessToken('abc123');
+    store.setAccessCodes(['System:Role:List']);
+    store.setAccessMenus([{ name: 'System', path: '/system' }]);
+    store.setAccessRoutes([{ name: 'System', path: '/system' }]);
+    store.setIsAccessChecked(true);
+
+    store.resetAccessState();
+
+    expect(store.accessToken).toBe('abc123');
+    expect(store.accessCodes).toEqual([]);
+    expect(store.accessMenus).toEqual([]);
+    expect(store.accessRoutes).toEqual([]);
+    expect(store.isAccessChecked).toBe(false);
+  });
 });

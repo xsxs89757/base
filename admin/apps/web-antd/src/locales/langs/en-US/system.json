@@ -61,7 +61,8 @@
     "createTime": "Creation Time",
     "operation": "Operation",
     "permissions": "Permissions",
-    "setPermissions": "Permissions"
+    "setPermissions": "Permissions",
+    "permissionLoadFailed": "Permission tree is not ready, please retry"
   },
   "config": {
     "title": "Config Management",

@@ -177,7 +177,7 @@ pnpm build:antd
 
 | 账号 | 密码 | 角色 | 权限 |
 | --- | --- | --- | --- |
-| vben | 123456 | super | 所有权限 |
+| super | 123456 | super | 所有权限 |
 | admin | 123456 | admin | 系统管理 |
 | jack | 123456 | user | 仅查看 |
 

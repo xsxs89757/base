@@ -12,6 +12,24 @@ import (
 	"github.com/gofiber/fiber/v2"
 )
 
+// GetRoleMenuTree 获取角色授权用的完整菜单树
+// @Summary 获取角色授权菜单树
+// @Description 返回所有菜单（含按钮）的树形结构，专供"编辑/新增角色"的权限抽屉使用。
+// @Description 该接口与系统菜单管理接口解耦：拥有角色管理权限的用户即使没有"菜单管理"权限，
+// @Description 也可以正常获取菜单树用于角色授权操作。
+// @Tags 系统管理 - 角色
+// @Produce json
+// @Security BearerAuth
+// @Success 200 {object} dto.Response{data=[]object}
+// @Failure 401 {object} dto.Response
+// @Router /admin/system/role/menu-tree [get]
+func GetRoleMenuTree(c *fiber.Ctx) error {
+	var menus []adminmodel.Menu
+	store.DB.Order("order_no ASC").Find(&menus)
+	tree := buildMenuTreeForManage(menus, 0)
+	return dto.Success(c, tree)
+}
+
 // GetAllRoles 获取全部角色（简单列表，不分页）
 // @Summary 获取全部角色
 // @Tags 系统管理 - 角色
@@ -148,6 +166,16 @@ func UpdateRole(c *fiber.Ctx) error {
 		return err
 	}
 
+	// super 角色受保护：不允许通过普通更新接口修改其菜单关联或停用，
+	// 防止"超级管理员"角色被误操作清空权限或禁用。
+	var existing adminmodel.Role
+	if err := store.DB.First(&existing, id).Error; err != nil {
+		return dto.Fail(c, fiber.StatusNotFound, "Role not found")
+	}
+	if existing.Code == "super" {
+		return dto.Fail(c, fiber.StatusForbidden, "超级管理员角色受系统保护，不允许修改")
+	}
+
 	updates := map[string]any{
 		"name":   req.Name,
 		"code":   req.Code,
@@ -156,6 +184,8 @@ func UpdateRole(c *fiber.Ctx) error {
 	}
 	store.DB.Model(&adminmodel.Role{}).Where("id = ?", id).Updates(updates)
 
+	// 仅当请求显式带上 menuIds/permissions 字段时才更新菜单关联。
+	// 字段缺失（指针 nil）时保持原有关联不变，避免"仅改状态/备注"等场景误清空权限。
 	if req.HasGrantedMenuIDs() {
 		var role adminmodel.Role
 		store.DB.First(&role, id)
@@ -183,6 +213,9 @@ func DeleteRole(c *fiber.Ctx) error {
 	var role adminmodel.Role
 	if err := store.DB.First(&role, id).Error; err != nil {
 		return dto.Fail(c, fiber.StatusNotFound, "Role not found")
+	}
+	if role.Code == "super" {
+		return dto.Fail(c, fiber.StatusForbidden, "超级管理员角色受系统保护，不允许删除")
 	}
 	store.DB.Model(&role).Association("Menus").Clear()
 	store.DB.Delete(&role)

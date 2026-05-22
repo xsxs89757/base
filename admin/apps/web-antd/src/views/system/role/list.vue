@@ -111,7 +111,15 @@ async function onStatusChange(
       `你要将${row.name}的状态切换为 【${status[newStatus.toString()]}】 吗？`,
       `切换状态`,
     );
-    await updateRole(row.id, { ...row, status: newStatus });
+    // 仅提交需要变更的字段，避免把 row.permissions（来自列表的旧数据）
+    // 误传给后端导致整套菜单权限被替换。后端在未收到 permissions 字段时
+    // 不会改动菜单关联。
+    await updateRole(row.id, {
+      name: row.name,
+      code: row.code,
+      status: newStatus,
+      remark: row.remark,
+    });
     return true;
   } catch {
     return false;

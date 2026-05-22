@@ -10,11 +10,10 @@ import { computed, nextTick, ref } from 'vue';
 import { Tree, useVbenDrawer } from '@vben/common-ui';
 import { IconifyIcon } from '@vben/icons';
 
-import { Spin } from 'ant-design-vue';
+import { message, Spin } from 'ant-design-vue';
 
 import { useVbenForm } from '#/adapter/form';
-import { getMenuList } from '#/api/system/menu';
-import { createRole, updateRole } from '#/api/system/role';
+import { createRole, getRoleMenuTree, updateRole } from '#/api/system/role';
 import { $t } from '#/locales';
 
 import { useFormSchema } from '../data';
@@ -30,6 +29,9 @@ const [Form, formApi] = useVbenForm({
 
 const permissions = ref<DataNode[]>([]);
 const loadingPermissions = ref(false);
+// Tree 仅在菜单数据加载完成后挂载，避免 treeData 为空时
+// 内部 updateTreeValue 把 modelValue 清空导致提交的 permissions 丢失。
+const treeReady = ref(false);
 
 const id = ref();
 const [Drawer, drawerApi] = useVbenDrawer({
@@ -37,6 +39,14 @@ const [Drawer, drawerApi] = useVbenDrawer({
     const { valid } = await formApi.validate();
     if (!valid) return;
     const values = await formApi.getValues();
+
+    // 防御：如果 permissions 字段意外为非数组（例如初始化异常），
+    // 直接拒绝提交，避免误把所有菜单关联清空。
+    if (values.permissions !== undefined && !Array.isArray(values.permissions)) {
+      message.error($t('system.role.permissionLoadFailed'));
+      return;
+    }
+
     drawerApi.lock();
     (id.value ? updateRole(id.value, values) : createRole(values))
       .then(() => {
@@ -60,14 +70,22 @@ const [Drawer, drawerApi] = useVbenDrawer({
         id.value = undefined;
       }
 
-      if (permissions.value.length === 0) {
-        await loadPermissions();
-      }
-      // Wait for Vue to flush DOM updates (form fields mounted)
+      // 每次打开都重新拉取菜单树，保证管理员对菜单的最新调整能反映出来。
+      // 加载完成前 Tree 不会挂载，以防初始化时序问题清空已勾选项。
+      treeReady.value = false;
+      await loadPermissions();
+      treeReady.value = true;
+
+      // 等 Tree 用最新 treeData 完成首轮 watchEffect 后再写入 modelValue，
+      // 确保 setValues 不会被 Tree 自身的"过滤无效 ID"逻辑误清空。
+      await nextTick();
       await nextTick();
       if (data) {
         formApi.setValues(data);
       }
+    } else {
+      // 抽屉关闭时让 Tree 一并卸载，下一次打开时按最新菜单数据重建。
+      treeReady.value = false;
     }
   },
 });
@@ -75,7 +93,8 @@ const [Drawer, drawerApi] = useVbenDrawer({
 async function loadPermissions() {
   loadingPermissions.value = true;
   try {
-    const res = await getMenuList();
+    // 使用角色管理专属菜单树接口，避免依赖"菜单管理"权限
+    const res = await getRoleMenuTree();
     permissions.value = res as unknown as DataNode[];
   } finally {
     loadingPermissions.value = false;
@@ -103,6 +122,7 @@ function getNodeClass(node: Recordable<any>) {
       <template #permissions="slotProps">
         <Spin :spinning="loadingPermissions" wrapper-class-name="w-full">
           <Tree
+            v-if="treeReady && permissions.length > 0"
             :tree-data="permissions"
             multiple
             bordered

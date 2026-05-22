@@ -63,7 +63,8 @@
     "createTime": "创建时间",
     "operation": "操作",
     "permissions": "权限",
-    "setPermissions": "授权"
+    "setPermissions": "授权",
+    "permissionLoadFailed": "权限数据未就绪，请稍后重试"
   },
   "config": {
     "title": "配置管理",

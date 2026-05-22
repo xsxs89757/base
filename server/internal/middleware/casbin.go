@@ -31,6 +31,9 @@ var authenticatedRoutes = []routePermission{
 var routePermissions = []routePermission{
 	{Method: "GET", Path: "/admin/system/role/all", Code: "System:Role:List"},
 	{Method: "GET", Path: "/admin/system/role/list", Code: "System:Role:List"},
+	// 角色管理专用菜单树仅供"角色管理"页面使用，复用 System:Role:List 权限码：
+	// 拥有角色管理列表权限即可调用，不强依赖"菜单管理"权限。
+	{Method: "GET", Path: "/admin/system/role/menu-tree", Code: "System:Role:List"},
 	{Method: "POST", Path: "/admin/system/role", Code: "System:Role:Create"},
 	{Method: "PUT", Path: "/admin/system/role/:id", Code: "System:Role:Edit"},
 	{Method: "DELETE", Path: "/admin/system/role/:id", Code: "System:Role:Delete"},
