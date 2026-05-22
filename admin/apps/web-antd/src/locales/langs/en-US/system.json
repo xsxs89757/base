@@ -31,6 +31,8 @@
     "authCode": "Auth Code",
     "badge": "Badge",
     "operation": "Operation",
+    "order": "Order",
+    "orderHelp": "Lower values display first; siblings are sorted ascending by this number",
     "linkSrc": "Link Address",
     "affixTab": "Affix In Tabs",
     "keepAlive": "Keep Alive",

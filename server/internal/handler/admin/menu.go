@@ -88,23 +88,7 @@ func CreateMenu(c *fiber.Ctx) error {
 		return err
 	}
 
-	menu := adminmodel.Menu{
-		ParentID:  req.ParentID,
-		Name:      req.Name,
-		Path:      req.Path,
-		Component: req.Component,
-		Redirect:  req.Redirect,
-		Type:      req.Type,
-		Icon:      req.Icon,
-		Title:     req.Title,
-		AuthCode:  req.AuthCode,
-		OrderNo:   req.OrderNo,
-		Status:    req.Status,
-		KeepAlive: req.KeepAlive,
-		AffixTab:  req.AffixTab,
-		IframeSrc: req.IframeSrc,
-		Link:      req.Link,
-	}
+	menu := menuFromRequest(req)
 	if err := store.DB.Create(&menu).Error; err != nil {
 		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create menu")
 	}
@@ -130,25 +114,77 @@ func UpdateMenu(c *fiber.Ctx) error {
 		return err
 	}
 
-	updates := adminmodel.Menu{
-		ParentID:  req.ParentID,
-		Name:      req.Name,
-		Path:      req.Path,
-		Component: req.Component,
-		Redirect:  req.Redirect,
-		Type:      req.Type,
-		Icon:      req.Icon,
-		Title:     req.Title,
-		AuthCode:  req.AuthCode,
-		OrderNo:   req.OrderNo,
-		Status:    req.Status,
-		KeepAlive: req.KeepAlive,
-		AffixTab:  req.AffixTab,
-		IframeSrc: req.IframeSrc,
-		Link:      req.Link,
+	// 用 map[string]any 进行更新：
+	// 1) 显式列出所有列名，把 bool 字段的 false 也写入（结构体 Updates 会忽略零值）
+	// 2) 装饰类 meta 字段（hideInMenu 等）取消勾选时需要能落库
+	// 3) order_no 用指针判断：仅在请求显式提交了 order 字段时才更新，
+	//    防止前端漏带导致排序被重置为 0
+	updates := map[string]any{
+		"parent_id":             req.ParentID,
+		"name":                  req.Name,
+		"path":                  req.Path,
+		"component":             req.Component,
+		"redirect":              req.Redirect,
+		"type":                  req.Type,
+		"icon":                  req.Icon,
+		"title":                 req.Title,
+		"auth_code":             req.AuthCode,
+		"status":                req.Status,
+		"keep_alive":            req.KeepAlive,
+		"affix_tab":             req.AffixTab,
+		"iframe_src":            req.IframeSrc,
+		"link":                  req.Link,
+		"active_icon":           req.ActiveIcon,
+		"active_path":           req.ActivePath,
+		"hide_in_menu":          req.HideInMenu,
+		"hide_in_breadcrumb":    req.HideInBreadcrumb,
+		"hide_in_tab":           req.HideInTab,
+		"hide_children_in_menu": req.HideChildrenInMenu,
+		"badge_type":            req.BadgeType,
+		"badge":                 req.Badge,
+		"badge_variants":        req.BadgeVariants,
+	}
+	if req.OrderNo != nil {
+		updates["order_no"] = *req.OrderNo
 	}
 	store.DB.Model(&adminmodel.Menu{}).Where("id = ?", id).Updates(updates)
 	return dto.Success(c, nil)
+}
+
+// menuFromRequest 把 MenuRequest 转换为 Menu model，供 Create 使用。
+// Update 走 map[string]any，否则 bool 字段的 false 会被 GORM 当作零值忽略，
+// 用户取消勾选 hideInMenu 等装饰字段时无法落库。
+func menuFromRequest(req admindto.MenuRequest) adminmodel.Menu {
+	order := 0
+	if req.OrderNo != nil {
+		order = *req.OrderNo
+	}
+	return adminmodel.Menu{
+		ParentID:           req.ParentID,
+		Name:               req.Name,
+		Path:               req.Path,
+		Component:          req.Component,
+		Redirect:           req.Redirect,
+		Type:               req.Type,
+		Icon:               req.Icon,
+		Title:              req.Title,
+		AuthCode:           req.AuthCode,
+		OrderNo:            order,
+		Status:             req.Status,
+		KeepAlive:          req.KeepAlive,
+		AffixTab:           req.AffixTab,
+		IframeSrc:          req.IframeSrc,
+		Link:               req.Link,
+		ActiveIcon:         req.ActiveIcon,
+		ActivePath:         req.ActivePath,
+		HideInMenu:         req.HideInMenu,
+		HideInBreadcrumb:   req.HideInBreadcrumb,
+		HideInTab:          req.HideInTab,
+		HideChildrenInMenu: req.HideChildrenInMenu,
+		BadgeType:          req.BadgeType,
+		Badge:              req.Badge,
+		BadgeVariants:      req.BadgeVariants,
+	}
 }
 
 // DeleteMenu 删除菜单
@@ -169,32 +205,88 @@ func DeleteMenu(c *fiber.Ctx) error {
 
 // CheckMenuNameExists 检查菜单名称是否存在
 // @Summary 检查菜单名称是否存在
+// @Description 编辑模式下传 id 排除当前记录自身，避免编辑时校验把自己也当作冲突。
 // @Tags 系统管理 - 菜单
 // @Produce json
 // @Security BearerAuth
 // @Param name query string true "菜单名称"
+// @Param id query int false "当前编辑的菜单ID（编辑模式必传，新增时省略）"
 // @Success 200 {object} dto.Response{data=bool}
 // @Router /admin/system/menu/name-exists [get]
 func CheckMenuNameExists(c *fiber.Ctx) error {
 	name := c.Query("name")
+	query := store.DB.Model(&adminmodel.Menu{}).Where("name = ?", name)
+	// 编辑模式：排除自身，避免误报"已存在"。id 非法或为 0 时忽略。
+	if rawID := c.Query("id"); rawID != "" {
+		if id, err := strconv.ParseUint(rawID, 10, 64); err == nil && id > 0 {
+			query = query.Where("id <> ?", id)
+		}
+	}
 	var count int64
-	store.DB.Model(&adminmodel.Menu{}).Where("name = ?", name).Count(&count)
+	query.Count(&count)
 	return dto.Success(c, count > 0)
 }
 
 // CheckMenuPathExists 检查菜单路径是否存在
 // @Summary 检查菜单路径是否存在
+// @Description 编辑模式下传 id 排除当前记录自身，避免编辑时校验把自己也当作冲突。
 // @Tags 系统管理 - 菜单
 // @Produce json
 // @Security BearerAuth
 // @Param path query string true "路由路径"
+// @Param id query int false "当前编辑的菜单ID（编辑模式必传，新增时省略）"
 // @Success 200 {object} dto.Response{data=bool}
 // @Router /admin/system/menu/path-exists [get]
 func CheckMenuPathExists(c *fiber.Ctx) error {
 	path := c.Query("path")
+	query := store.DB.Model(&adminmodel.Menu{}).Where("path = ?", path)
+	if rawID := c.Query("id"); rawID != "" {
+		if id, err := strconv.ParseUint(rawID, 10, 64); err == nil && id > 0 {
+			query = query.Where("id <> ?", id)
+		}
+	}
 	var count int64
-	store.DB.Model(&adminmodel.Menu{}).Where("path = ?", path).Count(&count)
+	query.Count(&count)
 	return dto.Success(c, count > 0)
+}
+
+// menuMeta 构造前端 Vben Admin 期望的 meta 对象。
+// 所有装饰类字段都收敛在这里，避免 list/manage 两条返回路径分叉。
+// 空字符串/默认 false 字段也带上，便于前端在编辑时直接 setValues 填回。
+func menuMeta(m adminmodel.Menu) fiber.Map {
+	meta := fiber.Map{
+		"title":              m.Title,
+		"icon":               m.Icon,
+		"order":              m.OrderNo,
+		"affixTab":           m.AffixTab,
+		"keepAlive":          m.KeepAlive,
+		"hideInMenu":         m.HideInMenu,
+		"hideInBreadcrumb":   m.HideInBreadcrumb,
+		"hideInTab":          m.HideInTab,
+		"hideChildrenInMenu": m.HideChildrenInMenu,
+	}
+	if m.ActiveIcon != "" {
+		meta["activeIcon"] = m.ActiveIcon
+	}
+	if m.ActivePath != "" {
+		meta["activePath"] = m.ActivePath
+	}
+	if m.BadgeType != "" {
+		meta["badgeType"] = m.BadgeType
+	}
+	if m.Badge != "" {
+		meta["badge"] = m.Badge
+	}
+	if m.BadgeVariants != "" {
+		meta["badgeVariants"] = m.BadgeVariants
+	}
+	if m.IframeSrc != "" {
+		meta["iframeSrc"] = m.IframeSrc
+	}
+	if m.Link != "" {
+		meta["link"] = m.Link
+	}
+	return meta
 }
 
 func buildMenuTree(menus []adminmodel.Menu, parentID uint) []fiber.Map {
@@ -204,13 +296,7 @@ func buildMenuTree(menus []adminmodel.Menu, parentID uint) []fiber.Map {
 			node := fiber.Map{
 				"name": m.Name,
 				"path": m.Path,
-				"meta": fiber.Map{
-					"title":     m.Title,
-					"icon":      m.Icon,
-					"order":     m.OrderNo,
-					"affixTab":  m.AffixTab,
-					"keepAlive": m.KeepAlive,
-				},
+				"meta": menuMeta(m),
 			}
 			if m.Component != "" {
 				node["component"] = m.Component
@@ -285,11 +371,7 @@ func buildMenuTreeForManage(menus []adminmodel.Menu, parentID uint) []fiber.Map 
 				"path":   m.Path,
 				"status": m.Status,
 				"type":   m.Type,
-				"meta": fiber.Map{
-					"title": m.Title,
-					"icon":  m.Icon,
-					"order": m.OrderNo,
-				},
+				"meta":   menuMeta(m),
 			}
 			if m.Component != "" {
 				node["component"] = m.Component

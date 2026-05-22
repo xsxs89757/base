@@ -75,6 +75,13 @@ export function useColumns(
       title: $t('system.menu.component'),
     },
     {
+      align: 'center',
+      field: 'meta.order',
+      formatter: ({ row }) => String(row?.meta?.order ?? 0),
+      title: $t('system.menu.order'),
+      width: 90,
+    },
+    {
       cellRender: { name: 'CellTag' },
       field: 'status',
       title: $t('system.menu.status'),

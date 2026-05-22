@@ -3,7 +3,10 @@ tmp_dir = "tmp"
 
 [build]
   entrypoint = "./tmp/server"
-  cmd = "go build -o ./tmp/server ."
+  # CGO_LDFLAGS=-w 抑制 macOS ld 链接器在 SDK 版本与 linker 版本不匹配时
+  # 反复输出的 "object file ... was built for newer 'macOS' version" 警告。
+  # 该警告不影响二进制功能，仅噪声，根治需对齐 Xcode CLT 与 Go 工具链。
+  cmd = "CGO_LDFLAGS=-w go build -o ./tmp/server ."
   delay = 1000
   exclude_dir = ["tmp", "docs", "vendor"]
   exclude_regex = ["_test.go"]

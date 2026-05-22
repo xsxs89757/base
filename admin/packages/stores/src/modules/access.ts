@@ -107,10 +107,12 @@ export const useAccessStore = defineStore('core-access', {
   },
   persist: {
     // 持久化
+    // 注意：accessCodes 不持久化，刷新页面时必须由 router guard 重新向后端拉取。
+    // 若持久化在 localStorage，管理员调整按钮权限后旧码会被回放，
+    // 出现"菜单已隐藏但按钮仍然可见"的不一致状态。
     pick: [
       'accessToken',
       'refreshToken',
-      'accessCodes',
       'isLockScreen',
       'lockScreenPassword',
     ],

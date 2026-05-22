@@ -266,6 +266,20 @@ const schema: VbenFormSchema[] = [
     label: $t('system.menu.status'),
   },
   {
+    component: 'InputNumber',
+    componentProps: {
+      class: 'w-full',
+      min: 0,
+      max: 9999,
+      precision: 0,
+      placeholder: $t('system.menu.orderHelp'),
+    },
+    defaultValue: 0,
+    fieldName: 'meta.order',
+    help: $t('system.menu.orderHelp'),
+    label: $t('system.menu.order'),
+  },
+  {
     component: 'Select',
     componentProps: {
       allowClear: true,
@@ -468,27 +482,60 @@ const [Drawer, drawerApi] = useVbenDrawer({
 
 async function onSubmit() {
   const { valid } = await formApi.validate();
-  if (valid) {
-    drawerApi.lock();
-    const data =
-      await formApi.getValues<
-        Omit<SystemMenuApi.SystemMenu, 'children' | 'id'>
-      >();
-    if (data.type === 'link') {
-      data.meta = { ...data.meta, link: data.linkSrc };
-    } else if (data.type === 'embedded') {
-      data.meta = { ...data.meta, iframeSrc: data.linkSrc };
-    }
-    delete data.linkSrc;
-    try {
-      await (formData.value?.id
-        ? updateMenu(formData.value.id, data)
-        : createMenu(data));
-      drawerApi.close();
-      emit('success');
-    } finally {
-      drawerApi.unlock();
-    }
+  if (!valid) return;
+
+  drawerApi.lock();
+  // 前端 schema 把所有装饰性字段都放在 meta.* 下（贴近 Vben 路由 meta 约定），
+  // 但后端 MenuRequest DTO 是平铺结构（title/icon/keepAlive/affixTab/iframeSrc/link）。
+  // 这里在提交前显式把 meta 子对象映射到顶层字段，避免后端 required 校验把 title 当空。
+  const data = (await formApi.getValues<Record<string, any>>()) as Record<
+    string,
+    any
+  >;
+
+  if (data.type === 'link') {
+    data.meta = { ...data.meta, link: data.linkSrc };
+  } else if (data.type === 'embedded') {
+    data.meta = { ...data.meta, iframeSrc: data.linkSrc };
+  }
+  delete data.linkSrc;
+
+  const meta = (data.meta ?? {}) as Record<string, any>;
+  // 后端 MenuRequest 是平铺结构，把 meta.* 展平到顶层。
+  // 装饰类 bool 字段需要把 undefined/falsy 都归一为 false，
+  // 否则用户取消勾选时后端拿不到字段无法落库。
+  if (meta.title !== undefined) data.title = meta.title;
+  if (meta.icon !== undefined) data.icon = meta.icon;
+  // order: 后端是 *int 指针；这里只在 InputNumber 给出明确数值时才提交，
+  // 留空/null 时不传 order 字段，后端就不会重置原有排序值。
+  if (meta.order !== undefined && meta.order !== null && meta.order !== '') {
+    data.order = Number(meta.order);
+  } else {
+    delete data.order;
+  }
+  if (meta.link !== undefined) data.link = meta.link;
+  if (meta.iframeSrc !== undefined) data.iframeSrc = meta.iframeSrc;
+  if (meta.activeIcon !== undefined) data.activeIcon = meta.activeIcon;
+  if (meta.activePath !== undefined) data.activePath = meta.activePath;
+  if (meta.badgeType !== undefined) data.badgeType = meta.badgeType;
+  if (meta.badge !== undefined) data.badge = meta.badge;
+  if (meta.badgeVariants !== undefined) data.badgeVariants = meta.badgeVariants;
+  data.keepAlive = !!meta.keepAlive;
+  data.affixTab = !!meta.affixTab;
+  data.hideInMenu = !!meta.hideInMenu;
+  data.hideInBreadcrumb = !!meta.hideInBreadcrumb;
+  data.hideInTab = !!meta.hideInTab;
+  data.hideChildrenInMenu = !!meta.hideChildrenInMenu;
+  delete data.meta;
+
+  try {
+    await (formData.value?.id
+      ? updateMenu(formData.value.id, data)
+      : createMenu(data));
+    drawerApi.close();
+    emit('success');
+  } finally {
+    drawerApi.unlock();
   }
 }
 const getDrawerTitle = computed(() =>
