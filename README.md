@@ -33,6 +33,14 @@ cp server/config.yaml.example server/config.yaml
 
 # 启动 (后端 air 热更新 + 前端 Vite HMR)
 ./dev.sh
+
+# 或使用 Makefile 快捷命令
+make dev
+
+# 如果 8080/5666 等开发端口被旧进程占用，可强制释放后启动
+make dev-force
+# 等价于
+./dev.sh --force
 ```
 
 后端修改 `.go` 文件后自动重新编译，前端修改即时热更新。按 `Ctrl+C` 停止所有服务。
@@ -69,6 +77,7 @@ pnpm dev:antd
 ## 项目结构
 
 ```
+├── Makefile                     # 快捷命令入口
 ├── dev.sh                       # 一键开发启动 (air 热更新)
 ├── deploy.sh                    # 一键部署脚本
 ├── .deploy.env.example          # 部署配置模板
@@ -122,6 +131,11 @@ cp .deploy.env.example .deploy.env
 ./deploy.sh all      # 全量部署 (默认)
 ./deploy.sh server   # 仅部署后端
 ./deploy.sh admin    # 仅部署后台前端
+
+# Makefile 快捷命令
+make release          # 全量部署
+make release-server   # 仅部署后端
+make release-admin    # 仅部署后台前端
 ```
 
 部署脚本会：
