@@ -10,41 +10,122 @@ NC='\033[0m'
 ROOT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SERVER_DIR="$ROOT_DIR/server"
 ADMIN_DIR="$ROOT_DIR/admin"
-BUILD_DIR="$ROOT_DIR/.build"
+# BUILD_DIR 在解析完项目名后按项目设置 (.build/<项目名>)
 
 # -------------------------------------------------------
 # 使用说明
 # -------------------------------------------------------
 usage() {
-    echo -e "${CYAN}用法: ./deploy.sh [server|admin|all]${NC}"
+    echo -e "${CYAN}用法: ./deploy.sh [server|admin|all] [项目名]${NC}"
     echo ""
     echo "  server  - 仅部署后端"
     echo "  admin   - 仅部署后台前端"
     echo "  all     - 全量部署 (默认)"
+    echo ""
+    echo "  项目名  - 可选。指定后读取 .deploy.<项目名>.env，"
+    echo "            用于同一台服务器发布多个项目；不指定读取 .deploy.env"
+    echo ""
+    echo "  -p, --project <项目名>  同上，显式指定项目"
+    echo "  -l, --list              列出已有的部署配置"
+    echo ""
+    echo "示例:"
+    echo "  ./deploy.sh                    # 默认配置全量部署"
+    echo "  ./deploy.sh server             # 默认配置仅部署后端"
+    echo "  ./deploy.sh all shop           # 使用 .deploy.shop.env 全量部署"
+    echo "  ./deploy.sh admin -p blog      # 使用 .deploy.blog.env 部署前端"
     exit 0
 }
 
-DEPLOY_MODE="${1:-all}"
-case "$DEPLOY_MODE" in
-    server|admin|all) ;;
-    web) DEPLOY_MODE="admin" ;;
-    -h|--help|help) usage ;;
-    *) echo -e "${RED}未知模式: $DEPLOY_MODE${NC}"; usage ;;
-esac
+list_projects() {
+    echo -e "${CYAN}可用部署配置:${NC}"
+    local found=0 f name
+    if [ -f "$ROOT_DIR/.deploy.env" ]; then
+        echo "  (默认)        .deploy.env"
+        found=1
+    fi
+    for f in "$ROOT_DIR"/.deploy.*.env; do
+        [ -f "$f" ] || continue
+        name=$(basename "$f")
+        name=${name#.deploy.}
+        name=${name%.env}
+        printf '  %-12s  %s\n' "$name" "$(basename "$f")"
+        found=1
+    done
+    if [ "$found" = "0" ]; then
+        echo -e "  ${YELLOW}(暂无，复制 .deploy.env.example 创建)${NC}"
+    fi
+}
+
+DEPLOY_MODE=""
+PROJECT=""
+while [ $# -gt 0 ]; do
+    case "$1" in
+        server|admin|all) DEPLOY_MODE="$1" ;;
+        web) DEPLOY_MODE="admin" ;;
+        -p|--project)
+            shift
+            [ -z "${1:-}" ] && { echo -e "${RED}-p/--project 需要指定项目名${NC}"; exit 1; }
+            PROJECT="$1"
+            ;;
+        -l|--list|list) list_projects; exit 0 ;;
+        -h|--help|help) usage ;;
+        -*) echo -e "${RED}未知参数: $1${NC}"; usage ;;
+        *)
+            if [ -z "$PROJECT" ]; then
+                PROJECT="$1"
+            else
+                echo -e "${RED}多余参数: $1${NC}"; usage
+            fi
+            ;;
+    esac
+    shift
+done
+DEPLOY_MODE="${DEPLOY_MODE:-all}"
 
 # -------------------------------------------------------
-# 加载配置
+# 加载配置（支持多项目: .deploy.<项目名>.env）
 # -------------------------------------------------------
-ENV_FILE="$ROOT_DIR/.deploy.env"
-if [ ! -f "$ENV_FILE" ]; then
-    echo -e "${RED}缺少部署配置文件 .deploy.env${NC}"
-    echo -e "${YELLOW}请复制 .deploy.env.example 为 .deploy.env 并填写实际配置${NC}"
-    echo ""
-    echo "  cp .deploy.env.example .deploy.env"
-    exit 1
+if [ -n "$PROJECT" ]; then
+    ENV_FILE="$ROOT_DIR/.deploy.${PROJECT}.env"
+    if [ ! -f "$ENV_FILE" ]; then
+        echo -e "${RED}缺少项目部署配置文件 .deploy.${PROJECT}.env${NC}"
+        echo -e "${YELLOW}请复制 .deploy.env.example 为 .deploy.${PROJECT}.env 并填写实际配置${NC}"
+        echo ""
+        echo "  cp .deploy.env.example .deploy.${PROJECT}.env"
+        echo ""
+        list_projects
+        exit 1
+    fi
+else
+    ENV_FILE="$ROOT_DIR/.deploy.env"
+    if [ ! -f "$ENV_FILE" ]; then
+        echo -e "${RED}缺少部署配置文件 .deploy.env${NC}"
+        echo -e "${YELLOW}请复制 .deploy.env.example 为 .deploy.env 并填写实际配置${NC}"
+        echo ""
+        echo "  cp .deploy.env.example .deploy.env"
+        exit 1
+    fi
 fi
 
 source "$ENV_FILE"
+
+# 项目名解析: .deploy.env 的 PROJECT_NAME > 命令行项目名 > 由 SERVICE_NAME 推导。
+# 服务名、远程临时文件、本地构建目录都按项目隔离，同一台服务器可发布多个项目。
+# 三者都缺时拒绝部署：base 的每份项目拷贝如果都落到同一个默认服务名，
+# 后部署的项目会顶掉先部署项目的 systemd 服务
+PROJECT_NAME="${PROJECT_NAME:-$PROJECT}"
+if [ -z "$PROJECT_NAME" ] && [ -n "${SERVICE_NAME:-}" ]; then
+    PROJECT_NAME="${SERVICE_NAME%-server}"
+fi
+if [ -z "$PROJECT_NAME" ]; then
+    echo -e "${RED}缺少项目标识：多个项目发布到同一台服务器时必须能区分项目${NC}"
+    echo -e "${YELLOW}请在 $(basename "$ENV_FILE") 中添加一行（改成你的项目名）:${NC}"
+    echo ""
+    echo "  PROJECT_NAME=shop"
+    echo ""
+    echo -e "${YELLOW}或设置 SERVICE_NAME；也可用 ./deploy.sh all <项目名> 走 .deploy.<项目名>.env${NC}"
+    exit 1
+fi
 
 REMOTE_ADMIN_DIR="${REMOTE_ADMIN_DIR:-${REMOTE_WEB_DIR:-}}"
 ADMIN_BUILD_CMD="${ADMIN_BUILD_CMD:-${WEB_BUILD_CMD:-pnpm build:antd}}"
@@ -58,8 +139,12 @@ done
 
 SSH_PORT="${SSH_PORT:-22}"
 AUTO_RESTART="${AUTO_RESTART:-no}"
-SERVICE_NAME="${SERVICE_NAME:-admin-server}"
+SERVICE_NAME="${SERVICE_NAME:-${PROJECT_NAME}-server}"
 SERVER_BIN_NAME="${SERVER_BIN_NAME:-server}"
+
+# 本地构建目录和远程临时包按项目区分，避免多项目互相覆盖
+BUILD_DIR="$ROOT_DIR/.build/${PROJECT_NAME}"
+REMOTE_TMP_TAR="/tmp/${PROJECT_NAME}-admin.tar.gz"
 
 # 检测 sshpass
 if ! command -v sshpass &>/dev/null; then
@@ -74,6 +159,25 @@ fi
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${SSH_PORT}"
 ssh_run() { sshpass -p "$SSH_PASS" ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" "$@"; }
 scp_to() { sshpass -p "$SSH_PASS" scp $SSH_OPTS -P "${SSH_PORT}" "$1" "${SSH_USER}@${SSH_HOST}:$2"; }
+
+# -------------------------------------------------------
+# 远程目录归属校验：目录内 .deploy-project 记录属主项目，
+# 防止两个项目的配置误指向同一个远程目录而互相覆盖
+# -------------------------------------------------------
+check_remote_owner() {
+    local dir="$1" label="$2" owner
+    owner=$(ssh_run "cat ${dir}/.deploy-project 2>/dev/null" | tr -d '[:space:]' || true)
+    if [ -n "$owner" ] && [ "$owner" != "$PROJECT_NAME" ]; then
+        echo -e "${RED}[${label}] 远程目录 ${dir} 属于项目 '${owner}'，当前项目为 '${PROJECT_NAME}'${NC}"
+        echo -e "${YELLOW}多项目共用服务器时请为每个项目配置独立的远程目录；${NC}"
+        echo -e "${YELLOW}确认目录确实归本项目使用，可删除该目录下的 .deploy-project 后重试${NC}"
+        exit 1
+    fi
+}
+
+mark_remote_owner() {
+    ssh_run "echo '${PROJECT_NAME}' > $1/.deploy-project"
+}
 
 # -------------------------------------------------------
 # 自动检测远程系统和架构
@@ -101,6 +205,7 @@ echo -e "${CYAN}==============================${NC}"
 echo -e "${CYAN}   Admin 后台管理系统 - 部署   ${NC}"
 echo -e "${CYAN}==============================${NC}"
 echo ""
+echo -e "  项目:       ${YELLOW}${PROJECT_NAME}${NC} (配置: $(basename "$ENV_FILE"))"
 echo -e "  部署模式:   ${YELLOW}${DEPLOY_MODE}${NC}"
 echo -e "  目标主机:   ${YELLOW}${SSH_USER}@${SSH_HOST}:${SSH_PORT}${NC}"
 echo -e "  远程系统:   ${YELLOW}${TARGET_OS}/${TARGET_ARCH}${NC}"
@@ -136,10 +241,12 @@ deploy_server() {
     echo -e "${GREEN}        编译完成: $BIN_NAME (使用生产配置)${NC}"
 
     echo -e "${YELLOW}[后端] 上传到服务器...${NC}"
+    check_remote_owner "$REMOTE_SERVER_DIR" "后端"
     ssh_run "mkdir -p ${REMOTE_SERVER_DIR}"
     scp_to "$BUILD_DIR/$BIN_NAME" "${REMOTE_SERVER_DIR}/$BIN_NAME"
     scp_to "$BUILD_DIR/config.yaml" "${REMOTE_SERVER_DIR}/config.yaml"
     ssh_run "chmod +x ${REMOTE_SERVER_DIR}/$BIN_NAME"
+    mark_remote_owner "$REMOTE_SERVER_DIR"
     echo -e "${GREEN}        上传完成${NC}"
 
     if [ "$AUTO_RESTART" = "yes" ]; then
@@ -154,14 +261,24 @@ deploy_server() {
 # 自动创建 systemd 服务
 # -------------------------------------------------------
 ensure_systemd_service() {
-    local service_exists
+    local service_exists unit_dir
     service_exists=$(ssh_run "systemctl list-unit-files ${SERVICE_NAME}.service 2>/dev/null | grep -c ${SERVICE_NAME}" || echo "0")
+
+    # 服务已存在时校验归属：WorkingDirectory 指向别的目录说明服务名被其他项目占用
+    if [ "$service_exists" != "0" ]; then
+        unit_dir=$(ssh_run "systemctl show -p WorkingDirectory ${SERVICE_NAME} 2>/dev/null" | cut -d= -f2- | tr -d '[:space:]' || true)
+        if [ -n "$unit_dir" ] && [ "$unit_dir" != "$REMOTE_SERVER_DIR" ]; then
+            echo -e "${RED}systemd 服务 ${SERVICE_NAME} 已被其他项目使用 (WorkingDirectory=${unit_dir})${NC}"
+            echo -e "${YELLOW}请在 $(basename "$ENV_FILE") 中为当前项目设置不同的 PROJECT_NAME 或 SERVICE_NAME${NC}"
+            exit 1
+        fi
+    fi
 
     if [ "$service_exists" = "0" ]; then
         echo -e "${YELLOW}[后端] 创建 systemd 服务: ${SERVICE_NAME}...${NC}"
         ssh_run "cat > /etc/systemd/system/${SERVICE_NAME}.service << 'UNIT'
 [Unit]
-Description=Admin Server
+Description=${PROJECT_NAME} Server (${SERVICE_NAME})
 After=network.target
 
 [Service]
@@ -207,9 +324,11 @@ deploy_admin() {
     echo -e "${GREEN}        打包完成${NC}"
 
     echo -e "${YELLOW}[前端] 上传到服务器...${NC}"
+    check_remote_owner "$REMOTE_ADMIN_DIR" "前端"
     ssh_run "mkdir -p ${REMOTE_ADMIN_DIR}"
-    scp_to "$BUILD_DIR/admin.tar.gz" "/tmp/admin.tar.gz"
-    ssh_run "rm -rf ${REMOTE_ADMIN_DIR}/* && tar -xzf /tmp/admin.tar.gz -C ${REMOTE_ADMIN_DIR} && rm -f /tmp/admin.tar.gz"
+    scp_to "$BUILD_DIR/admin.tar.gz" "$REMOTE_TMP_TAR"
+    ssh_run "rm -rf ${REMOTE_ADMIN_DIR}/* && tar -xzf ${REMOTE_TMP_TAR} -C ${REMOTE_ADMIN_DIR} && rm -f ${REMOTE_TMP_TAR}"
+    mark_remote_owner "$REMOTE_ADMIN_DIR"
     echo -e "${GREEN}        上传完成${NC}"
 }
 
@@ -223,9 +342,10 @@ case "$DEPLOY_MODE" in
 esac
 
 rm -rf "$BUILD_DIR"
+rmdir "$ROOT_DIR/.build" 2>/dev/null || true
 
 echo ""
 echo -e "${GREEN}==============================${NC}"
-echo -e "${GREEN}   部署完成！(${DEPLOY_MODE})${NC}"
+echo -e "${GREEN}   部署完成！(${PROJECT_NAME} / ${DEPLOY_MODE})${NC}"
 echo -e "${GREEN}==============================${NC}"
 echo ""

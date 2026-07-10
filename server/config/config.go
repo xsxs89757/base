@@ -2,6 +2,7 @@ package config
 
 import (
 	"os"
+	"strconv"
 	"time"
 
 	"gopkg.in/yaml.v3"
@@ -40,5 +41,14 @@ func Load(path string) error {
 	if err != nil {
 		return err
 	}
-	return yaml.Unmarshal(data, &C)
+	if err := yaml.Unmarshal(data, &C); err != nil {
+		return err
+	}
+	// 环境变量 SERVER_PORT 优先于 config.yaml，dev.sh 自动换端口时依赖此覆盖
+	if v := os.Getenv("SERVER_PORT"); v != "" {
+		if port, err := strconv.Atoi(v); err == nil && port > 0 && port < 65536 {
+			C.Server.Port = port
+		}
+	}
+	return nil
 }

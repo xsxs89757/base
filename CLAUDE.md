@@ -1,23 +1,24 @@
 # AGENTS.md
 
-本文件给 Codex/Agents 使用，作用范围为 `96_server/` 整个目录。开发时同时参考 `CLAUDE.md`，但以本文件中的路径和执行约定为当前仓库准则。
+本文件给 Codex/Agents 使用，作用范围为整个仓库。CLAUDE.md 与 AGENTS.md 内容保持一致，以本文件中的路径和执行约定为当前仓库准则。
 
 ## 项目概览
 
 这是一个后台管理系统：
 
 - 后端：`server/`，Go Fiber v2 + GORM + Casbin v3 + JWT + Swagger/OpenAPI。
-- 前端：`web/`，Vben Admin v5 + Vue 3 + TypeScript + Ant Design Vue + Vite + Pinia + Tailwind CSS。
-- 前端应用主路径：`web/apps/web-antd/src/`。
+- 前端：`admin/`，Vben Admin v5 + Vue 3 + TypeScript + Ant Design Vue + Vite + Pinia + Tailwind CSS。
+- 前端应用主路径：`admin/apps/web-antd/src/`。
 - 后端管理接口前缀：`/admin`。
-- 前端开发代理：`/api` 会被 Vite 改写到后端 `/admin`，见 `web/apps/web-antd/vite.config.mts`。
+- 前端开发代理：`/api` 会被 Vite 改写到后端 `/admin`，见 `admin/apps/web-antd/vite.config.mts`。
+- 本仓库是模板（base）：会被拷贝出多个项目，并可能发布到同一台服务器；改 `dev.sh`、`deploy.sh` 时必须保持多项目共存能力（端口自动切换、按 `PROJECT_NAME` 隔离部署）。
 
 ## 工作原则
 
 - 先读现有实现，再改代码。优先复用项目已有的 handler/service/model、Vben adapter、页面结构和命名风格。
 - 涉及完整功能时，后端、前端、路由、权限、i18n、Swagger 文档一起处理，不只改单层。
 - 保持改动范围小。不要顺手重构无关模块，不要引入未使用依赖。
-- 不要提交或依赖本地敏感配置：`.deploy.env`、`server/config.yaml`、`server/config.prod.yaml`。
+- 不要提交或依赖本地敏感配置：`.deploy.env`、`.deploy.*.env`、`server/config.yaml`、`server/config.prod.yaml`。
 - `server/docs/` 是 Swagger 生成物；只有 API 变更需要同步生成时才更新。
 
 ## 后端开发规则
@@ -95,7 +96,7 @@ swag init -g main.go -o docs --parseDependency --parseInternal
 
 ### 前端路径
 
-主要目录在 `web/apps/web-antd/src/`：
+主要目录在 `admin/apps/web-antd/src/`：
 
 - `api/`：接口定义，统一使用 `requestClient`。
 - `views/`：页面组件。
@@ -131,7 +132,7 @@ swag init -g main.go -o docs --parseDependency --parseInternal
 
 ### API、路由和 i18n
 
-- API 方法写在 `web/apps/web-antd/src/api/`，按业务模块分文件并补 TypeScript namespace/types。
+- API 方法写在 `admin/apps/web-antd/src/api/`，按业务模块分文件并补 TypeScript namespace/types。
 - `requestClient` 已经配置 `codeField: code`、`dataField: data`、`successCode: 0`，后端响应要与其匹配。
 - 前端调用路径写逻辑路径，例如 `/system/user/list`；开发时 Vite 会把 `/api` 代理到后端 `/admin`。
 - 所有页面可见文案都要走 `$t()`，并同步维护 `zh-CN` 和 `en-US` 翻译。
@@ -148,9 +149,12 @@ go test ./...
 swag init -g main.go -o docs --parseDependency --parseInternal
 
 # 前端
-cd web
+cd admin
 pnpm dev:antd
 pnpm build:antd
+
+# 部署脚本改动后做语法检查
+bash -n dev.sh && bash -n deploy.sh
 ```
 
 如果只是文档或规则变更，至少检查 Markdown 内容和路径是否与当前仓库一致。
@@ -158,8 +162,9 @@ pnpm build:antd
 ## 常用命令
 
 ```bash
-# 一键启动前后端
-./dev.sh
+# 一键启动前后端（默认：端口被占用时自动改用空闲端口，可同机多项目并行）
+./dev.sh          # 等价 make dev
+./dev.sh --force  # 杀死占用进程、坚持用配置端口，等价 make dev-force
 
 # 后端开发
 cd server
@@ -167,10 +172,15 @@ go run main.go
 air
 
 # 前端开发
-cd web
+cd admin
 pnpm install
 pnpm dev:antd
 pnpm build:antd
+
+# 部署（读取 .deploy.env，PROJECT_NAME 必填；详见 README「多项目发布」）
+./deploy.sh [server|admin|all]        # 等价 make release / release-server / release-admin
+./deploy.sh all <项目名>              # 同仓库多目标：读取 .deploy.<项目名>.env
+./deploy.sh --list                    # 列出已有部署配置
 ```
 
 ## 默认账号
@@ -186,3 +196,5 @@ pnpm build:antd
 - 后端 API：`http://localhost:8080`
 - 前端开发：`http://localhost:5666`
 - Swagger UI：`http://localhost:8080/swagger/index.html`，仅开发环境使用
+- 以上为配置默认值。`./dev.sh` 发现端口被占用会自动换用空闲端口，实际端口以启动输出为准；后端端口支持环境变量 `SERVER_PORT` 覆盖 `config.yaml`，前端端口由 dev.sh 通过 `VITE_ADMIN_PORT` 传入。
+- 同机可能有其他项目（如 laitui）的 dev 正在 8080/5666/3000 上运行；杀端口进程前先用 `ps -p <pid> -o command=` 确认进程属于本项目。

@@ -37,7 +37,9 @@ cp server/config.yaml.example server/config.yaml
 # 或使用 Makefile 快捷命令
 make dev
 
-# 如果 8080/5666 等开发端口被旧进程占用，可强制释放后启动
+# 8080/5666 等开发端口被占用时，默认自动改用空闲端口启动，
+# 同一台机器可同时跑多个项目的 dev，互不干扰。
+# 如果希望杀死占用进程、坚持使用配置端口：
 make dev-force
 # 等价于
 ./dev.sh --force
@@ -137,6 +139,42 @@ make release          # 全量部署
 make release-server   # 仅部署后端
 make release-admin    # 仅部署后台前端
 ```
+
+### 多项目发布到同一台服务器
+
+base 的典型用法是**每个项目一份仓库拷贝**。每个项目在自己的 `.deploy.env` 里
+设置独立的 `PROJECT_NAME` 和远程目录，即可安全地发布到同一台服务器：
+
+```bash
+# 项目 A 仓库的 .deploy.env          # 项目 B 仓库的 .deploy.env
+PROJECT_NAME=shop                    PROJECT_NAME=blog
+REMOTE_SERVER_DIR=/opt/shop/server   REMOTE_SERVER_DIR=/opt/blog/server
+REMOTE_ADMIN_DIR=/opt/shop/admin     REMOTE_ADMIN_DIR=/opt/blog/admin
+```
+
+部署按 `PROJECT_NAME` 隔离：systemd 服务名（`shop-server` / `blog-server`）、
+远程临时包和本地构建目录互不影响。同时有三道防覆盖保护，任一触发都会中止部署：
+
+- 缺少项目标识（`PROJECT_NAME` / `SERVICE_NAME` 都未设置）时拒绝部署；
+- 远程目录内有 `.deploy-project` 归属标记，目录属于其他项目时报错；
+- systemd 服务名已被指向其他目录的项目占用时报错。
+
+如果想在**同一份仓库里维护多套发布目标**（比如一套代码发多个站点、或区分测试/生产），
+再用 `.deploy.<名字>.env` 配置：
+
+```bash
+cp .deploy.env.example .deploy.shop.env   # 编辑填入该目标的项目名/目录
+
+./deploy.sh all shop         # 使用 .deploy.shop.env 全量部署
+./deploy.sh server -p shop   # 仅部署 shop 后端
+./deploy.sh --list           # 查看已有的部署配置
+
+# Makefile 等价命令
+make release PROJECT=shop
+make release-server PROJECT=shop
+```
+
+不指定项目名时仍读取 `.deploy.env`，与单项目用法完全兼容。
 
 部署脚本会：
 - **自动检测**远程服务器的系统和架构 (linux/amd64, linux/arm64 等)

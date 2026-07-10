@@ -18,7 +18,8 @@ FORCE_MODE=0
 usage() {
     echo -e "${CYAN}用法: ./dev.sh [--force|-f]${NC}"
     echo ""
-    echo "  --force, -f  启动前杀死占用后端/前端开发端口的进程"
+    echo "  默认:        端口被占用时自动改用空闲端口启动 (不影响其他项目)"
+    echo "  --force, -f  杀死占用后端/前端开发端口的进程，坚持使用配置端口"
     echo "  --help, -h   显示帮助"
     exit "${1:-0}"
 }
@@ -131,11 +132,37 @@ kill_port_listeners() {
     echo -e "${GREEN}      ${label} 端口 ${port} 已释放${NC}"
 }
 
-ensure_port_available() {
+port_in_use() {
+    local port="$1"
+    [ -n "$(get_port_pids "$port")" ]
+}
+
+find_free_port() {
+    local port="$1"
+    local exclude="${2:-}"
+    local limit=$((port + 100))
+
+    while [ "$port" -le "$limit" ]; do
+        if [ "$port" != "$exclude" ] && ! port_in_use "$port"; then
+            echo "$port"
+            return 0
+        fi
+        port=$((port + 1))
+    done
+    return 1
+}
+
+# 解析最终使用的端口，结果写入 RESOLVED_PORT：
+#   默认模式  端口被占用 -> 自动挑选空闲端口
+#   强制模式  端口被占用 -> 杀死占用进程，坚持使用配置端口
+RESOLVED_PORT=""
+resolve_port() {
     local port="$1"
     local label="$2"
-    local pids
+    local exclude="${3:-}"
+    local pids free_port
 
+    RESOLVED_PORT="$port"
     pids=$(get_port_pids "$port" | format_pids)
     [ -z "$pids" ] && return 0
 
@@ -144,20 +171,47 @@ ensure_port_available() {
         return 0
     fi
 
-    echo -e "${RED}${label} 端口 ${port} 已被占用:${NC}"
+    echo -e "${YELLOW}${label} 端口 ${port} 已被占用:${NC}"
     print_processes "$pids"
-    echo -e "${YELLOW}请先停止占用进程，或使用 ./dev.sh --force / make dev-force 强制释放后启动${NC}"
-    exit 1
+
+    if ! free_port=$(find_free_port $((port + 1)) "$exclude"); then
+        echo -e "${RED}未找到空闲的${label}端口 (从 ${port} 起已尝试 100 个)${NC}"
+        echo -e "${YELLOW}可使用 ./dev.sh --force / make dev-force 强制释放配置端口${NC}"
+        exit 1
+    fi
+
+    RESOLVED_PORT="$free_port"
+    echo -e "${GREEN}      自动改用空闲端口 ${free_port} (如需固定端口: ./dev.sh --force)${NC}"
+}
+
+# 杀掉整棵进程树：pnpm 是多层包装，vite/server 是孙进程，
+# 只杀直接子进程会在非交互(kill)场景下留下孤儿监听进程。
+# 必须先收集完整棵树再统一 kill——边杀边遍历时上层先退出，
+# 下层会被过继给 PID 1，pgrep -P 就找不到了
+collect_tree() {
+    local p
+    echo "$1"
+    for p in $(pgrep -P "$1" 2>/dev/null); do
+        collect_tree "$p"
+    done
+}
+
+kill_tree() {
+    local pids
+    pids=$(collect_tree "$1" | tr '\n' ' ')
+    [ -n "$pids" ] && kill $pids 2>/dev/null
+    return 0
 }
 
 cleanup() {
     echo ""
     echo -e "${YELLOW}正在关闭服务...${NC}"
-    [ -n "$AIR_PID" ] && kill "$AIR_PID" 2>/dev/null && echo -e "${GREEN}后端已停止${NC}"
-    [ -n "$ADMIN_PID" ] && kill "$ADMIN_PID" 2>/dev/null && echo -e "${GREEN}前端已停止${NC}"
+    [ -n "$AIR_PID" ] && kill_tree "$AIR_PID" && echo -e "${GREEN}后端已停止${NC}"
+    [ -n "$ADMIN_PID" ] && kill_tree "$ADMIN_PID" && echo -e "${GREEN}前端已停止${NC}"
     pkill -P $$ 2>/dev/null
     exit 0
 }
+
 
 trap cleanup SIGINT SIGTERM
 
@@ -166,8 +220,14 @@ echo -e "${CYAN}   Admin 后台管理系统 - DEV   ${NC}"
 echo -e "${CYAN}==============================${NC}"
 echo ""
 
-ensure_port_available "$SERVER_PORT" "后端"
-ensure_port_available "$ADMIN_PORT" "前端"
+resolve_port "$SERVER_PORT" "后端"
+SERVER_PORT="$RESOLVED_PORT"
+resolve_port "$ADMIN_PORT" "前端" "$SERVER_PORT"
+ADMIN_PORT="$RESOLVED_PORT"
+
+# 后端 config.Load 支持 SERVER_PORT 环境变量覆盖 config.yaml，
+# air 启动的服务进程会继承该变量，自动换端口才能生效
+export SERVER_PORT
 
 # --- 检查 air ---
 AIR_BIN="$(go env GOPATH)/bin/air"
@@ -213,7 +273,9 @@ if [ ! -d node_modules ]; then
     pnpm install --no-frozen-lockfile
 fi
 
-VITE_API_PORT=$SERVER_PORT pnpm dev:antd -- --port "$ADMIN_PORT" &
+# 端口通过 VITE_ADMIN_PORT 传递：pnpm 多层转发会把 `-- --port` 吞成位置参数，
+# vite 收不到 --port，因此改用环境变量（见 apps/web-antd/vite.config.mts）
+VITE_API_PORT=$SERVER_PORT VITE_ADMIN_PORT=$ADMIN_PORT pnpm dev:antd &
 ADMIN_PID=$!
 sleep 3
 

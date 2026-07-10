@@ -26,6 +26,7 @@ server/docs
 
 # Deploy
 .deploy.env
+.deploy.*.env
 .build
 
 # Node / Frontend
