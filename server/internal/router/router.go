@@ -6,5 +6,6 @@ import "github.com/gofiber/fiber/v2"
 func Setup(app *fiber.App) {
 	SetupAdmin(app)
 	SetupAPI(app)
+	SetupProject(app)
 }
 

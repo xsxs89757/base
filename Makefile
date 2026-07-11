@@ -10,7 +10,7 @@ ifeq ($(FORCE),1)
 DEV_FLAGS += --force
 endif
 
-.PHONY: help dev dev-force force-dev release publish release-server publish-server release-admin publish-admin build build-server build-admin test test-server swagger
+.PHONY: help dev dev-force force-dev release publish release-server publish-server release-admin publish-admin build build-server build-admin test test-server swagger sync-base
 
 help:
 	@echo "Admin 管理系统快捷命令"
@@ -28,6 +28,9 @@ help:
 	@echo ""
 	@echo "  多项目: make release PROJECT=shop   使用 .deploy.shop.env 发布"
 	@echo "          ./deploy.sh --list          查看已有部署配置"
+	@echo ""
+	@echo "基底:"
+	@echo "  make sync-base        下游项目合入基底更新 (git fetch base && git merge base/main)"
 	@echo ""
 	@echo "验证/构建:"
 	@echo "  make test             运行后端测试"
@@ -64,3 +67,11 @@ test-server:
 
 swagger:
 	@cd server && swag init -g main.go -o docs --parseDependency --parseInternal
+
+sync-base:
+	@git remote get-url base >/dev/null 2>&1 || { \
+		echo "未找到名为 base 的 remote（基底仓库本体无需同步）。"; \
+		echo "下游项目请先执行: git remote add base https://github.com/xsxs89757/base.git"; \
+		exit 1; }
+	@git fetch base
+	@git merge base/main

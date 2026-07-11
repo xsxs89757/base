@@ -84,18 +84,21 @@ func Init() {
 	}
 
 	// AutoMigrate: 无表自动建表，新字段自动加列（不删列不改类型，和 FreeSql 行为一致）
-	if err = DB.AutoMigrate(
+	models := []any{
 		&adminmodel.User{},
 		&adminmodel.Role{},
 		&adminmodel.Menu{},
 		&adminmodel.Dept{},
 		&adminmodel.Config{},
 		&adminmodel.OperationLog{},
-	); err != nil {
+	}
+	models = append(models, projectModels...)
+	if err = DB.AutoMigrate(models...); err != nil {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
 
 	seed()
+	projectSeed()
 }
 
 // ---------------------------------------------------------------------------

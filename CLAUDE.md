@@ -11,7 +11,37 @@
 - 前端应用主路径：`admin/apps/web-antd/src/`。
 - 后端管理接口前缀：`/admin`。
 - 前端开发代理：`/api` 会被 Vite 改写到后端 `/admin`，见 `admin/apps/web-antd/vite.config.mts`。
-- 本仓库是模板（base）：会被拷贝出多个项目，并可能发布到同一台服务器；改 `dev.sh`、`deploy.sh` 时必须保持多项目共存能力（端口自动切换、按 `PROJECT_NAME` 隔离部署）。
+- 本仓库是统一基底（base）：下游项目以 git clone 派生并持续 merge 吸收基底更新，见「基底与下游项目」一节；多个项目可能发布到同一台服务器，改 `dev.sh`、`deploy.sh` 时必须保持多项目共存能力（端口自动切换、按 `PROJECT_NAME` 隔离部署）。
+
+## 基底与下游项目
+
+本仓库是统一基底，地址 `https://github.com/xsxs89757/base`。新项目从基底克隆派生，之后持续用 git merge 吸收基底的 bug 修复与新功能。
+
+身份判断：`git remote -v` 中 origin 指向 `xsxs89757/base` 时是基底本体；存在名为 `base` 的 remote 时是下游项目。本文件其余规则两种身份通用，下游项目额外遵守「下游开发纪律」。
+
+### 新项目初始化（下游 bootstrap）
+
+用户新开项目并指定使用本基底时，按以下方式创建。禁止「删 `.git` 重新 init」或纯文件拷贝——那会切断与基底的共同历史，之后无法正常 merge：
+
+```bash
+git clone https://github.com/xsxs89757/base.git <项目名>
+cd <项目名>
+git remote rename origin base
+git remote add origin <新项目自己的仓库地址>   # 用户未提供则先跳过
+git push -u origin main
+```
+
+初始化后按项目补本地配置（已 gitignore，不会与基底冲突）：复制 `server/config.yaml.example` 为 `server/config.yaml`；部署前创建 `.deploy.env`（`PROJECT_NAME` 必填）。
+
+### 下游开发纪律
+
+- 基底文件只在基底仓库修改。下游发现基底 bug 或需要通用功能：到基底仓库改、提交、推送，再回下游执行 `make sync-base` 合入；禁止在下游就地修改基底文件。
+- 下游业务代码只放新增文件：后端新建 model/service/handler/dto/validator 文件；前端新建 views 目录、api 文件、`router/routes/modules/` 路由文件、locales 文案文件（这些目录都是自动扫描，新增文件即生效）。
+- 基底预留了两个下游挂载点，基底仓库承诺永不修改它们（在基底中保持空实现），下游可任意编辑：
+  - `server/internal/router/project.go`：注册下游业务路由。
+  - `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
+- 不要修改 `server/go.mod` 的 module 名（保持 `base`），否则全部 import 路径与基底 diverge，之后每次 merge 都大面积冲突。
+- 同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：基底文件取基底版本，下游业务文件取下游版本；拿不准归属时用 `git log base/main -- <文件>` 查该文件是否属于基底。
 
 ## 工作原则
 
@@ -32,7 +62,7 @@
 3. `server/internal/validator/admin/`：请求校验。
 4. `server/internal/service/admin/`：业务逻辑。
 5. `server/internal/handler/admin/`：HTTP handler 和 Swagger 注解。
-6. `server/internal/router/admin.go`：注册 `/admin/*` 路由。
+6. `server/internal/router/admin.go`：注册 `/admin/*` 路由（下游项目改为注册到 `router/project.go`，见「基底与下游项目」）。
 7. `server/docs/`：API 变更后重新生成 Swagger。
 
 公共层：

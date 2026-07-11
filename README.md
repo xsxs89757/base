@@ -184,6 +184,32 @@ make release-server PROJECT=shop
 - **自动创建** systemd 服务（首次部署时）
 - **自动重启**服务
 
+## 基底与下游项目
+
+本仓库是统一基底：`https://github.com/xsxs89757/base`。新项目从基底克隆派生，
+之后随时 `make sync-base` 合入基底的 bug 修复和新功能。
+
+```bash
+# 创建新项目（必须保留共同 git 历史，禁止删 .git 重新 init / 纯文件拷贝）
+git clone https://github.com/xsxs89757/base.git myproject
+cd myproject
+git remote rename origin base
+git remote add origin <新项目仓库地址>
+git push -u origin main
+
+# 之后同步基底更新
+make sync-base   # 等价 git fetch base && git merge base/main
+```
+
+下游开发约定（保证 merge 基本无冲突）：
+
+- 基底文件只在基底仓库改，改完在各下游 `make sync-base` 合入；
+- 业务代码放新增文件；路由和模型用两个专属挂载点注册（基底永不改动它们）：
+  `server/internal/router/project.go`、`server/internal/store/project.go`；
+- 不改 `server/go.mod` 的 module 名（保持 `base`）。
+
+详细纪律见 CLAUDE.md / AGENTS.md 的「基底与下游项目」一节。
+
 ## 功能模块
 
 | 模块 | 说明 |
