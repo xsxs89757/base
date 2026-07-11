@@ -4,14 +4,17 @@ import (
 	"fmt"
 	"log"
 	"strings"
+	"time"
 
 	"base/config"
 	adminmodel "base/internal/model/admin"
 
+	// 纯 Go 的 SQLite 驱动：deploy.sh 用 CGO_ENABLED=0 交叉编译，
+	// CGO 版驱动 (gorm.io/driver/sqlite) 编译出的二进制在生产连库直接 fatal
+	"github.com/glebarez/sqlite"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/driver/mysql"
 	"gorm.io/driver/postgres"
-	"gorm.io/driver/sqlite"
 	"gorm.io/driver/sqlserver"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -22,7 +25,7 @@ var DB *gorm.DB
 func dialector(driver, dsn string) (gorm.Dialector, error) {
 	switch normalizeDriver(driver) {
 	case "sqlite", "sqlite3", "":
-		return sqlite.Open(dsn), nil
+		return sqlite.Open(sqliteDSNWithDefaults(dsn)), nil
 	case "mysql", "mariadb":
 		return mysql.Open(dsn), nil
 	case "postgres", "postgresql", "pgsql":
@@ -38,6 +41,21 @@ func normalizeDriver(driver string) string {
 	return strings.ToLower(strings.TrimSpace(driver))
 }
 
+// sqliteDSNWithDefaults 给 SQLite DSN 补默认 PRAGMA：
+// WAL 让读写不再互相阻塞（默认 delete 模式下写风暴会把读请求拖到几十 ms），
+// busy_timeout 把 "database is locked" 变成短暂等待，synchronous=NORMAL 是
+// WAL 模式官方推荐搭配。用户已显式写 _pragma 时不做任何改写。
+func sqliteDSNWithDefaults(dsn string) string {
+	if strings.Contains(dsn, "_pragma") {
+		return dsn
+	}
+	sep := "?"
+	if strings.Contains(dsn, "?") {
+		sep = "&"
+	}
+	return dsn + sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
+}
+
 func Init() {
 	cfg := config.C.Database
 
@@ -51,6 +69,18 @@ func Init() {
 	})
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
+	}
+
+	// 连接池：ConnMaxLifetime 必须小于 MySQL 的 wait_timeout（默认 8h，云上常被调低），
+	// 否则闲置连接被服务端掐断后会偶发 "invalid connection"。
+	// MaxIdle 与 MaxOpen 取相同值，避免高峰期连接反复重建（go-sql-driver 官方建议）。
+	// 对 SQLite 同样无害：新连接会重新应用 DSN 里的 PRAGMA。
+	if sqlDB, err := DB.DB(); err == nil {
+		sqlDB.SetMaxOpenConns(25)
+		sqlDB.SetMaxIdleConns(25)
+		sqlDB.SetConnMaxLifetime(3 * time.Minute)
+	} else {
+		log.Printf("failed to configure connection pool: %v", err)
 	}
 
 	// AutoMigrate: 无表自动建表，新字段自动加列（不删列不改类型，和 FreeSql 行为一致）

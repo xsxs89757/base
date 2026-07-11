@@ -5,6 +5,7 @@ import (
 
 	"base/internal/dto"
 	admindto "base/internal/dto/admin"
+	"base/internal/middleware"
 	adminmodel "base/internal/model/admin"
 	"base/internal/store"
 	"base/internal/validator"
@@ -127,6 +128,12 @@ func CreateRole(c *fiber.Ctx) error {
 		return err
 	}
 
+	// code=super 是权限体系里的最高特权标识（CasbinAuth 见到该角色码直接全量放行），
+	// 属系统保留字：只允许由种子数据创建，禁止通过接口新建，否则等于开放"自助提权"入口。
+	if req.Code == "super" {
+		return dto.Fail(c, fiber.StatusBadRequest, "角色 code \"super\" 为系统保留，不可创建")
+	}
+
 	role := adminmodel.Role{
 		Name:   req.Name,
 		Code:   req.Code,
@@ -144,6 +151,7 @@ func CreateRole(c *fiber.Ctx) error {
 		store.DB.Model(&role).Association("Menus").Replace(menus)
 	}
 
+	middleware.InvalidatePermissionCache()
 	return dto.Success(c, fiber.Map{"id": role.ID})
 }
 
@@ -176,6 +184,12 @@ func UpdateRole(c *fiber.Ctx) error {
 		return dto.Fail(c, fiber.StatusForbidden, "超级管理员角色受系统保护，不允许修改")
 	}
 
+	// 禁止把任意其它角色改名成保留字 code=super（否则可绕过上面"现有 super 不可改"的保护，
+	// 把一个普通角色升格为最高特权角色，再分配给自己完成提权）。
+	if req.Code == "super" {
+		return dto.Fail(c, fiber.StatusBadRequest, "角色 code \"super\" 为系统保留，不可使用")
+	}
+
 	updates := map[string]any{
 		"name":   req.Name,
 		"code":   req.Code,
@@ -196,6 +210,7 @@ func UpdateRole(c *fiber.Ctx) error {
 		store.DB.Model(&role).Association("Menus").Replace(menus)
 	}
 
+	middleware.InvalidatePermissionCache()
 	return dto.Success(c, nil)
 }
 
@@ -219,5 +234,6 @@ func DeleteRole(c *fiber.Ctx) error {
 	}
 	store.DB.Model(&role).Association("Menus").Clear()
 	store.DB.Delete(&role)
+	middleware.InvalidatePermissionCache()
 	return dto.Success(c, nil)
 }

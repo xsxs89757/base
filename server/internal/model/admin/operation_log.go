@@ -14,7 +14,6 @@ type OperationLog struct {
 	IP        string    `json:"ip" gorm:"size:64"`
 	UserAgent string    `json:"userAgent" gorm:"size:512"`
 	Body      string    `json:"body" gorm:"type:text"`
-	Resp      string    `json:"resp" gorm:"type:text"`
 }
 
 func (OperationLog) TableName() string {

@@ -9,7 +9,7 @@ type Config struct {
 	ConfigValue string `json:"configValue" gorm:"type:text"`
 	ConfigGroup string `json:"configGroup" gorm:"size:64;index"`
 	Remark      string `json:"remark" gorm:"size:256"`
-	Status      int    `json:"status" gorm:"default:1"`
+	Status      int    `json:"status"`
 }
 
 func (Config) TableName() string {

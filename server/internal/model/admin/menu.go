@@ -12,9 +12,9 @@ type Menu struct {
 	Type      string `json:"type" gorm:"size:16;not null;comment:catalog|menu|button|embedded|link"`
 	Icon      string `json:"icon" gorm:"size:64"`
 	Title     string `json:"title" gorm:"size:64;not null"`
-	AuthCode  string `json:"authCode,omitempty" gorm:"size:64"`
+	AuthCode  string `json:"authCode,omitempty" gorm:"size:64;index"`
 	OrderNo   int    `json:"order" gorm:"default:0"`
-	Status    int    `json:"status" gorm:"default:1;comment:0=disabled 1=enabled"`
+	Status    int    `json:"status" gorm:"comment:0=disabled 1=enabled"`
 	KeepAlive bool   `json:"keepAlive" gorm:"default:false"`
 	AffixTab  bool   `json:"affixTab" gorm:"default:false"`
 	IframeSrc string `json:"iframeSrc,omitempty" gorm:"size:256"`

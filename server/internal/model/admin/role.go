@@ -6,7 +6,7 @@ type Role struct {
 	model.BaseModel
 	Name   string `json:"name" gorm:"uniqueIndex;size:64;not null"`
 	Code   string `json:"code" gorm:"uniqueIndex;size:64;not null"`
-	Status int    `json:"status" gorm:"default:1;comment:0=disabled 1=enabled"`
+	Status int    `json:"status" gorm:"comment:0=disabled 1=enabled"`
 	Remark string `json:"remark" gorm:"size:256"`
 	Menus  []Menu `json:"menus,omitempty" gorm:"many2many:role_menus;"`
 }

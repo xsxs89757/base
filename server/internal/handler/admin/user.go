@@ -5,6 +5,7 @@ import (
 
 	"base/internal/dto"
 	admindto "base/internal/dto/admin"
+	"base/internal/middleware"
 	adminsvc "base/internal/service/admin"
 	"base/internal/validator"
 
@@ -84,6 +85,10 @@ func CreateUser(c *fiber.Ctx) error {
 		return err
 	}
 
+	if adminsvc.RolesIncludeSuperCode(req.RoleIDs) && !middleware.OperatorIsSuper(c) {
+		return dto.Fail(c, fiber.StatusForbidden, "无权分配超级管理员角色")
+	}
+
 	user := adminsvc.NewUser(req.Username, req.Password, req.RealName, req.Email, req.Phone, req.Status, req.Remark)
 	if err := adminsvc.CreateUser(user, req.RoleIDs); err != nil {
 		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create user: "+err.Error())
@@ -109,6 +114,10 @@ func UpdateUser(c *fiber.Ctx) error {
 	var req admindto.UpdateUserRequest
 	if err := validator.BindAndValidate(c, &req); err != nil {
 		return err
+	}
+
+	if adminsvc.RolesIncludeSuperCode(req.RoleIDs) && !middleware.OperatorIsSuper(c) {
+		return dto.Fail(c, fiber.StatusForbidden, "无权分配超级管理员角色")
 	}
 
 	updates := map[string]any{

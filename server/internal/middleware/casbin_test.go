@@ -8,7 +8,7 @@ import (
 	"base/internal/store"
 
 	"github.com/gofiber/fiber/v2"
-	"gorm.io/driver/sqlite"
+	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
 

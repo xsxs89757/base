@@ -7,7 +7,7 @@ type Dept struct {
 	ParentID uint   `json:"pid" gorm:"default:0"`
 	Name     string `json:"name" gorm:"size:64;not null"`
 	OrderNo  int    `json:"order" gorm:"default:0"`
-	Status   int    `json:"status" gorm:"default:1"`
+	Status   int    `json:"status"`
 	Remark   string `json:"remark" gorm:"size:256"`
 }
 

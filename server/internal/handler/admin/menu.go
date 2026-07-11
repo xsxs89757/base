@@ -6,6 +6,7 @@ import (
 
 	"base/internal/dto"
 	admindto "base/internal/dto/admin"
+	"base/internal/middleware"
 	adminmodel "base/internal/model/admin"
 	adminsvc "base/internal/service/admin"
 	"base/internal/store"
@@ -92,6 +93,7 @@ func CreateMenu(c *fiber.Ctx) error {
 	if err := store.DB.Create(&menu).Error; err != nil {
 		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create menu")
 	}
+	middleware.InvalidatePermissionCache()
 	return dto.Success(c, fiber.Map{"id": menu.ID})
 }
 
@@ -148,6 +150,7 @@ func UpdateMenu(c *fiber.Ctx) error {
 		updates["order_no"] = *req.OrderNo
 	}
 	store.DB.Model(&adminmodel.Menu{}).Where("id = ?", id).Updates(updates)
+	middleware.InvalidatePermissionCache()
 	return dto.Success(c, nil)
 }
 
@@ -200,6 +203,7 @@ func DeleteMenu(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
 	store.DB.Where("parent_id = ?", id).Delete(&adminmodel.Menu{})
 	store.DB.Delete(&adminmodel.Menu{}, id)
+	middleware.InvalidatePermissionCache()
 	return dto.Success(c, nil)
 }
 

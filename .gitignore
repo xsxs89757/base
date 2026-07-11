@@ -17,6 +17,7 @@ Thumbs.db
 
 # Go
 server/data.db
+server/data.db-*
 server/server
 server/*.exe
 server/tmp

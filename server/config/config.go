@@ -21,6 +21,8 @@ type ServerConfig struct {
 	CorsOrigins   string `yaml:"cors_origins"`
 	SwaggerTitle  string `yaml:"swagger_title"`
 	SwaggerDesc   string `yaml:"swagger_desc"`
+	// 操作日志保留天数，<=0 表示永久保留（默认）
+	OpLogRetentionDays int `yaml:"op_log_retention_days"`
 }
 
 type DatabaseConfig struct {

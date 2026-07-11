@@ -5,10 +5,11 @@ server:
   cors_origins: "*"          # 允许的跨域来源，多个用逗号分隔，如: https://admin.example.com,https://www.example.com
   swagger_title: ""          # 留空使用默认值: Admin 后台管理系统 API
   swagger_desc: ""           # 留空使用默认值
+  op_log_retention_days: 0   # 操作日志保留天数，0=永久保留，建议生产设 90
 
 database:
-  driver: sqlite                # sqlite / mysql / postgres / sqlserver
-  dsn: "./data.db"
+  driver: sqlite                # sqlite / mysql / postgres / sqlserver (sqlite 为纯 Go 驱动，支持 CGO_ENABLED=0 交叉编译)
+  dsn: "./data.db"              # sqlite 自动附加 WAL/busy_timeout PRAGMA；DSN 里已写 _pragma 时不改写
   # MySQL 示例:
   #   driver: mysql
   #   dsn: "user:password@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"

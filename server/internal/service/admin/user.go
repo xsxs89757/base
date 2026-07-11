@@ -40,6 +40,17 @@ func GetUserList(params UserListParams) ([]adminmodel.User, int64, error) {
 	return users, total, nil
 }
 
+// RolesIncludeSuperCode 判断给定角色 ID 列表里是否包含 code=super 的角色。
+// 用于阻止普通管理员通过创建/更新用户把 super 角色分配出去（super 越权防线之一）。
+func RolesIncludeSuperCode(roleIDs []uint) bool {
+	if len(roleIDs) == 0 {
+		return false
+	}
+	var count int64
+	store.DB.Model(&adminmodel.Role{}).Where("id IN ? AND code = ?", roleIDs, "super").Count(&count)
+	return count > 0
+}
+
 func CreateUser(user *adminmodel.User, roleIDs []uint) error {
 	hash, err := bcrypt.GenerateFromPassword([]byte(user.Password), bcrypt.DefaultCost)
 	if err != nil {

@@ -112,6 +112,13 @@ func RefreshToken(c *fiber.Ctx) error {
 		return dto.Fail(c, fiber.StatusForbidden, "Forbidden Exception")
 	}
 
+	// 禁用（status=0）或已删除的管理员不得再用 refresh cookie 续签 access token，
+	// 否则后台"禁用账号"在 access token 过期前（最长可达数天）形同虚设。
+	if user.Status != 1 {
+		c.Cookie(&fiber.Cookie{Name: "jwt", Value: "", MaxAge: -1})
+		return dto.Fail(c, fiber.StatusForbidden, "Forbidden Exception")
+	}
+
 	roles := adminsvc.GetRoleNames(user)
 	newToken, err := middleware.GenerateAccessToken(user.ID, user.Username, roles)
 	if err != nil {
