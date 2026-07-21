@@ -264,11 +264,17 @@ deploy_server() {
 # 自动创建 systemd 服务
 # -------------------------------------------------------
 ensure_systemd_service() {
-    local service_exists unit_dir
-    service_exists=$(ssh_run "systemctl list-unit-files ${SERVICE_NAME}.service 2>/dev/null | grep -c ${SERVICE_NAME}" || echo "0")
+    local service_exists=0 unit_dir
+    # 用 grep -q 的退出码判断存在性，不解析输出。
+    # 不能写 `$(... | grep -c ...) || echo 0`：服务不存在时远程 grep -c 已输出 "0"
+    # 且退出码为 1，|| 再补一个 0 会拼成两行 "0\n0"——既不等于 "0" 也不为空，
+    # 结果跳过创建、直接 restart 报 service not found
+    if ssh_run "systemctl list-unit-files ${SERVICE_NAME}.service 2>/dev/null | grep -q ${SERVICE_NAME}"; then
+        service_exists=1
+    fi
 
     # 服务已存在时校验归属：WorkingDirectory 指向别的目录说明服务名被其他项目占用
-    if [ "$service_exists" != "0" ]; then
+    if [ "$service_exists" = "1" ]; then
         unit_dir=$(ssh_run "systemctl show -p WorkingDirectory ${SERVICE_NAME} 2>/dev/null" | cut -d= -f2- | tr -d '[:space:]' || true)
         if [ -n "$unit_dir" ] && [ "$unit_dir" != "$REMOTE_SERVER_DIR" ]; then
             echo -e "${RED}systemd 服务 ${SERVICE_NAME} 已被其他项目使用 (WorkingDirectory=${unit_dir})${NC}"
