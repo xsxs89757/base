@@ -224,9 +224,85 @@ rm -rf "$BUILD_DIR"
 mkdir -p "$BUILD_DIR"
 
 # -------------------------------------------------------
+# 后端端口解析
+#   首次部署(服务不存在): 配置端口被占用时从该端口向后找空闲端口启动，
+#                         并把本地 config.prod.yaml 回写成实际使用的端口
+#   服务已存在:           端口是既定事实(nginx/回调都依赖它)，被其他进程
+#                         占用时只提醒、不自动更换，人工处理
+# -------------------------------------------------------
+
+remote_service_exists() {
+    ssh_run "systemctl list-unit-files ${SERVICE_NAME}.service 2>/dev/null | grep -q ${SERVICE_NAME}"
+}
+
+remote_port_in_use() {
+    ssh_run "ss -tln 2>/dev/null | awk '{print \$4}' | grep -q '[:.]${1}\$'"
+}
+
+update_prod_config_port() {
+    local new_port="$1" cfg="$SERVER_DIR/config.prod.yaml"
+    # 只匹配 "port: <数字>" 形式(server.port)，DSN 里的 port=xxx 不受影响
+    sed -i.deploybak -E "s/^([[:space:]]*port:[[:space:]]*)[0-9]+/\1${new_port}/" "$cfg"
+    rm -f "${cfg}.deploybak"
+}
+
+FINAL_SERVER_PORT=""
+
+resolve_server_port() {
+    local configured_port final_port i main_pid listener
+    configured_port=$(grep -E '^[[:space:]]*port:' "$SERVER_DIR/config.prod.yaml" | head -1 | awk '{print $2}')
+    configured_port=${configured_port:-8080}
+    FINAL_SERVER_PORT="$configured_port"
+
+    echo -e "${YELLOW}[后端] 检查远程端口 ${configured_port}...${NC}"
+
+    if remote_service_exists; then
+        if remote_port_in_use "$configured_port"; then
+            # 端口在监听——先判断是不是本服务自己占着(正常情况)
+            main_pid=$(ssh_run "systemctl show -p MainPID --value ${SERVICE_NAME} 2>/dev/null" | tr -d '[:space:]' || true)
+            listener=$(ssh_run "ss -tlnp 2>/dev/null | grep '[:.]${configured_port} ' | head -1" || true)
+            if [ -n "$main_pid" ] && [ "$main_pid" != "0" ] && echo "$listener" | grep -q "pid=${main_pid},"; then
+                echo -e "${GREEN}        端口 ${configured_port} 由本服务占用，重启后继续使用${NC}"
+                return 0
+            fi
+            echo -e "${RED}服务 ${SERVICE_NAME} 已存在，但端口 ${configured_port} 被其他进程占用:${NC}"
+            echo -e "        ${listener:-（无法获取占用进程信息）}"
+            echo -e "${YELLOW}已部署过的服务端口不自动更换（nginx/回调地址都依赖它），请人工处理:${NC}"
+            echo -e "        1) 释放该端口；或"
+            echo -e "        2) 修改 server/config.prod.yaml 的 port 并同步更新 nginx 配置后重新部署"
+            exit 1
+        fi
+        return 0
+    fi
+
+    # 首次部署：配置端口空闲则直接用
+    if ! remote_port_in_use "$configured_port"; then
+        return 0
+    fi
+
+    echo -e "${YELLOW}        端口 ${configured_port} 已被占用，向后寻找空闲端口...${NC}"
+    final_port=$configured_port
+    for i in $(seq 1 50); do
+        final_port=$((final_port + 1))
+        if ! remote_port_in_use "$final_port"; then
+            FINAL_SERVER_PORT="$final_port"
+            update_prod_config_port "$final_port"
+            echo -e "${GREEN}        改用空闲端口 ${final_port}，已同步回写 server/config.prod.yaml${NC}"
+            echo -e "${YELLOW}        注意: nginx 站点配置请使用端口 ${final_port}${NC}"
+            return 0
+        fi
+    done
+
+    echo -e "${RED}从 ${configured_port} 起连续 50 个端口都被占用，请人工确认服务器状态${NC}"
+    exit 1
+}
+
+# -------------------------------------------------------
 # 编译后端
 # -------------------------------------------------------
 deploy_server() {
+    resolve_server_port
+
     echo -e "${YELLOW}[后端] 交叉编译 (${TARGET_OS}/${TARGET_ARCH})...${NC}"
     cd "$SERVER_DIR"
 
@@ -256,7 +332,14 @@ deploy_server() {
         ensure_systemd_service
         echo -e "${YELLOW}[后端] 重启服务 (${SERVICE_NAME})...${NC}"
         ssh_run "systemctl restart ${SERVICE_NAME}"
-        echo -e "${GREEN}        服务已重启${NC}"
+        sleep 2
+        if ssh_run "systemctl is-active --quiet ${SERVICE_NAME}"; then
+            echo -e "${GREEN}        服务运行中 (端口 ${FINAL_SERVER_PORT})${NC}"
+        else
+            echo -e "${RED}        服务启动失败，最近日志:${NC}"
+            ssh_run "journalctl -u ${SERVICE_NAME} -n 15 --no-pager" || true
+            exit 1
+        fi
     fi
 }
 
@@ -269,7 +352,7 @@ ensure_systemd_service() {
     # 不能写 `$(... | grep -c ...) || echo 0`：服务不存在时远程 grep -c 已输出 "0"
     # 且退出码为 1，|| 再补一个 0 会拼成两行 "0\n0"——既不等于 "0" 也不为空，
     # 结果跳过创建、直接 restart 报 service not found
-    if ssh_run "systemctl list-unit-files ${SERVICE_NAME}.service 2>/dev/null | grep -q ${SERVICE_NAME}"; then
+    if remote_service_exists; then
         service_exists=1
     fi
 

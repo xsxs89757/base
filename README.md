@@ -178,11 +178,16 @@ make release-server PROJECT=shop
 
 部署脚本会：
 - **自动检测**远程服务器的系统和架构 (linux/amd64, linux/arm64 等)
+- **端口自动避让**（仅首次部署）：配置端口在服务器上被占用时，从该端口向后找到
+  空闲端口启动，并**同步回写本地 `server/config.prod.yaml`**；终端会提示 nginx
+  站点配置应使用的实际端口
+- **端口冲突保护**（已部署过的服务）：端口被其他进程占用时**只告警不自动更换**
+  （nginx/回调地址都依赖既定端口），需人工释放端口或改配置后重新部署
 - **交叉编译** Go 后端 (`CGO_ENABLED=0`)
 - **打包** 前端静态资源
 - **SSH 上传**到服务器指定目录
 - **自动创建** systemd 服务（首次部署时）
-- **自动重启**服务
+- **自动重启**服务并做健康检查，启动失败自动拉取最近的 journal 日志
 
 ## 基底与下游项目
 
@@ -287,3 +292,15 @@ database:
 ```
 
 项目已内置 SQLite、MySQL/MariaDB、PostgreSQL、SQL Server 对应的 GORM 驱动，无需额外 `go get`。
+
+### 本地 SQLite 与生产 MySQL 的差异陷阱
+
+本地用 SQLite 开发、生产切 MySQL 时，有一类问题只会在 MySQL 上暴露，本地测不出来：
+
+- **同一字段禁止同时写 `uniqueIndex` 和 `index`**，例如
+  `gorm:"uniqueIndex;index"`。两个未命名标签会生成同名的默认索引，
+  GORM 把同一列在一个索引里放两次——本地 SQLite 建表不报错，
+  MySQL AutoMigrate 直接报 `1060 Duplicate column name`。
+  `uniqueIndex` 本身就是索引，不需要再叠加 `index`。
+- 上线前务必用 MySQL 完整启动一次（AutoMigrate + 主流程），
+  不要只依赖本地 SQLite 验证。
