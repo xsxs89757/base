@@ -156,8 +156,10 @@ if ! command -v sshpass &>/dev/null; then
     fi
 fi
 
-SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10 -p ${SSH_PORT}"
-ssh_run() { sshpass -p "$SSH_PASS" ssh $SSH_OPTS "${SSH_USER}@${SSH_HOST}" "$@"; }
+# 端口参数不能放进公共 SSH_OPTS：ssh 用 -p，而 scp 的 -p 是"保留时间戳"(不带参数)，
+# 端口号会被 scp 当成待上传的本地文件 (scp: stat local "22": No such file)
+SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
+ssh_run() { sshpass -p "$SSH_PASS" ssh $SSH_OPTS -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "$@"; }
 scp_to() { sshpass -p "$SSH_PASS" scp $SSH_OPTS -P "${SSH_PORT}" "$1" "${SSH_USER}@${SSH_HOST}:$2"; }
 
 # -------------------------------------------------------
@@ -185,7 +187,8 @@ mark_remote_owner() {
 echo -e "${YELLOW}检测远程服务器系统信息...${NC}"
 REMOTE_INFO=$(ssh_run "echo \$(uname -s)_\$(uname -m)")
 REMOTE_UNAME_S=$(echo "$REMOTE_INFO" | cut -d'_' -f1)
-REMOTE_UNAME_M=$(echo "$REMOTE_INFO" | cut -d'_' -f2)
+# -f2- 取第一个下划线之后的全部：x86_64 自带下划线，-f2 会截成 x86 被误判为不支持
+REMOTE_UNAME_M=$(echo "$REMOTE_INFO" | cut -d'_' -f2-)
 
 case "$REMOTE_UNAME_S" in
     Linux)   TARGET_OS="linux" ;;
