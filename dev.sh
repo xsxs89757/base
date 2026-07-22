@@ -21,6 +21,8 @@ usage() {
     echo "  默认:        端口被占用时自动改用空闲端口启动 (不影响其他项目)"
     echo "  --force, -f  杀死占用后端/前端开发端口的进程，坚持使用配置端口"
     echo "  --help, -h   显示帮助"
+    echo ""
+    echo "  仓库根存在 dev.project.sh 时会一并启动下游扩展服务"
     exit "${1:-0}"
 }
 
@@ -137,13 +139,23 @@ port_in_use() {
     [ -n "$(get_port_pids "$port")" ]
 }
 
+# 本次启动已分配出去的端口。多个服务(含 dev.project.sh 扩展服务)依次 resolve_port 时，
+# 先解析的服务可能尚未真正 LISTEN，仅靠 lsof 探测会把同一端口分给两个服务
+CLAIMED_PORTS=""
+
+port_claimed() {
+    case " $CLAIMED_PORTS " in
+        *" $1 "*) return 0 ;;
+    esac
+    return 1
+}
+
 find_free_port() {
     local port="$1"
-    local exclude="${2:-}"
     local limit=$((port + 100))
 
     while [ "$port" -le "$limit" ]; do
-        if [ "$port" != "$exclude" ] && ! port_in_use "$port"; then
+        if ! port_claimed "$port" && ! port_in_use "$port"; then
             echo "$port"
             return 0
         fi
@@ -159,28 +171,37 @@ RESOLVED_PORT=""
 resolve_port() {
     local port="$1"
     local label="$2"
-    local exclude="${3:-}"
     local pids free_port
 
     RESOLVED_PORT="$port"
     pids=$(get_port_pids "$port" | format_pids)
-    [ -z "$pids" ] && return 0
 
-    if [ "$FORCE_MODE" = "1" ]; then
-        kill_port_listeners "$port" "$label"
+    if [ -z "$pids" ] && ! port_claimed "$port"; then
+        CLAIMED_PORTS="$CLAIMED_PORTS $port"
         return 0
     fi
 
-    echo -e "${YELLOW}${label} 端口 ${port} 已被占用:${NC}"
-    print_processes "$pids"
+    if [ -n "$pids" ] && [ "$FORCE_MODE" = "1" ]; then
+        kill_port_listeners "$port" "$label"
+        CLAIMED_PORTS="$CLAIMED_PORTS $port"
+        return 0
+    fi
 
-    if ! free_port=$(find_free_port $((port + 1)) "$exclude"); then
+    if [ -n "$pids" ]; then
+        echo -e "${YELLOW}${label} 端口 ${port} 已被占用:${NC}"
+        print_processes "$pids"
+    else
+        echo -e "${YELLOW}${label} 端口 ${port} 与本次启动的其他服务冲突${NC}"
+    fi
+
+    if ! free_port=$(find_free_port $((port + 1))); then
         echo -e "${RED}未找到空闲的${label}端口 (从 ${port} 起已尝试 100 个)${NC}"
         echo -e "${YELLOW}可使用 ./dev.sh --force / make dev-force 强制释放配置端口${NC}"
         exit 1
     fi
 
     RESOLVED_PORT="$free_port"
+    CLAIMED_PORTS="$CLAIMED_PORTS $free_port"
     echo -e "${GREEN}      自动改用空闲端口 ${free_port} (如需固定端口: ./dev.sh --force)${NC}"
 }
 
@@ -208,12 +229,23 @@ cleanup() {
     echo -e "${YELLOW}正在关闭服务...${NC}"
     [ -n "$AIR_PID" ] && kill_tree "$AIR_PID" && echo -e "${GREEN}后端已停止${NC}"
     [ -n "$ADMIN_PID" ] && kill_tree "$ADMIN_PID" && echo -e "${GREEN}前端已停止${NC}"
+    type project_dev_stop &>/dev/null && project_dev_stop
     pkill -P $$ 2>/dev/null
     exit 0
 }
 
 
 trap cleanup SIGINT SIGTERM
+
+# --- 下游挂载点: dev.project.sh (基底不包含此文件、永不创建，下游按需新增) ---
+# 在仓库根新增 dev.project.sh 即可挂载额外开发服务，可实现三个函数:
+#   project_dev_start  后端/前端启动完成后调用: 用 resolve_port 解析端口
+#                      (自动处理占用/强制模式/与已分配端口去重)，后台启动服务并记下 PID
+#   project_dev_stop   Ctrl+C 清理时调用: 用 kill_tree <PID> 停掉自己启动的服务
+#   project_dev_info   启动汇总里追加打印服务地址行
+if [ -f "$ROOT_DIR/dev.project.sh" ]; then
+    source "$ROOT_DIR/dev.project.sh"
+fi
 
 echo -e "${CYAN}==============================${NC}"
 echo -e "${CYAN}   Admin 后台管理系统 - DEV   ${NC}"
@@ -222,7 +254,7 @@ echo ""
 
 resolve_port "$SERVER_PORT" "后端"
 SERVER_PORT="$RESOLVED_PORT"
-resolve_port "$ADMIN_PORT" "前端" "$SERVER_PORT"
+resolve_port "$ADMIN_PORT" "前端"
 ADMIN_PORT="$RESOLVED_PORT"
 
 # 后端 config.Load 支持 SERVER_PORT 环境变量覆盖 config.yaml，
@@ -279,6 +311,11 @@ VITE_API_PORT=$SERVER_PORT VITE_ADMIN_PORT=$ADMIN_PORT pnpm dev:antd &
 ADMIN_PID=$!
 sleep 3
 
+# --- 下游扩展服务 (dev.project.sh) ---
+if type project_dev_start &>/dev/null; then
+    project_dev_start
+fi
+
 echo ""
 echo -e "${GREEN}==============================${NC}"
 echo -e "${GREEN}   全部服务已启动！${NC}"
@@ -287,6 +324,9 @@ echo ""
 echo -e "  前端:    ${CYAN}http://localhost:${ADMIN_PORT}${NC}"
 echo -e "  后端:    ${CYAN}http://localhost:${SERVER_PORT}${NC}"
 echo -e "  Swagger: ${CYAN}http://localhost:${SERVER_PORT}/swagger/index.html${NC}"
+if type project_dev_info &>/dev/null; then
+    project_dev_info
+fi
 echo ""
 echo -e "  默认账号: ${YELLOW}super / 123456${NC}"
 echo ""

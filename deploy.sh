@@ -13,6 +13,33 @@ ADMIN_DIR="$ROOT_DIR/admin"
 # BUILD_DIR 在解析完项目名后按项目设置 (.build/<项目名>)
 
 # -------------------------------------------------------
+# 下游挂载点: deploy.project.sh (基底不包含此文件、永不创建，下游按需新增)
+# 在仓库根新增 deploy.project.sh 即可挂载额外部署目标:
+#   PROJECT_DEPLOY_TARGETS="agent worker"   声明额外目标名(空格分隔)
+#   project_deploy_<目标名>() { ... }        每个目标对应的部署函数
+#   project_deploy_info() { ... }            (可选) 部署信息头里追加打印
+# 额外目标可单独部署 (./deploy.sh <目标名>)，all 模式在 server/admin 之后依次执行。
+# 函数体内可用助手: ssh_run / scp_to / check_remote_owner / mark_remote_owner /
+#   ensure_systemd_unit / remote_service_exists / remote_port_in_use /
+#   restart_remote_service，以及 TARGET_OS / TARGET_ARCH / BUILD_DIR /
+#   PROJECT_NAME / AUTO_RESTART 等变量。
+# 注意: 本文件在解析参数前加载，此时 .deploy.env 尚未读入，
+#       依赖配置变量的校验要放到 project_deploy_* 函数体内做。
+# -------------------------------------------------------
+PROJECT_DEPLOY_TARGETS=""
+if [ -f "$ROOT_DIR/deploy.project.sh" ]; then
+    source "$ROOT_DIR/deploy.project.sh"
+fi
+
+is_project_target() {
+    local t
+    for t in $PROJECT_DEPLOY_TARGETS; do
+        [ "$t" = "$1" ] && return 0
+    done
+    return 1
+}
+
+# -------------------------------------------------------
 # 使用说明
 # -------------------------------------------------------
 usage() {
@@ -20,7 +47,13 @@ usage() {
     echo ""
     echo "  server  - 仅部署后端"
     echo "  admin   - 仅部署后台前端"
-    echo "  all     - 全量部署 (默认)"
+    echo "  all     - 全量部署 (默认，含下游扩展目标)"
+    if [ -n "$PROJECT_DEPLOY_TARGETS" ]; then
+        local t
+        for t in $PROJECT_DEPLOY_TARGETS; do
+            printf '  %-7s - 下游扩展目标 (deploy.project.sh)\n' "$t"
+        done
+    fi
     echo ""
     echo "  项目名  - 可选。指定后读取 .deploy.<项目名>.env，"
     echo "            用于同一台服务器发布多个项目；不指定读取 .deploy.env"
@@ -71,7 +104,10 @@ while [ $# -gt 0 ]; do
         -h|--help|help) usage ;;
         -*) echo -e "${RED}未知参数: $1${NC}"; usage ;;
         *)
-            if [ -z "$PROJECT" ]; then
+            # 下游扩展目标名优先于项目名; 项目名与目标同名时用 -p 指定项目
+            if is_project_target "$1"; then
+                DEPLOY_MODE="$1"
+            elif [ -z "$PROJECT" ]; then
                 PROJECT="$1"
             else
                 echo -e "${RED}多余参数: $1${NC}"; usage
@@ -212,11 +248,14 @@ echo -e "  项目:       ${YELLOW}${PROJECT_NAME}${NC} (配置: $(basename "$ENV
 echo -e "  部署模式:   ${YELLOW}${DEPLOY_MODE}${NC}"
 echo -e "  目标主机:   ${YELLOW}${SSH_USER}@${SSH_HOST}:${SSH_PORT}${NC}"
 echo -e "  远程系统:   ${YELLOW}${TARGET_OS}/${TARGET_ARCH}${NC}"
-if [ "$DEPLOY_MODE" != "admin" ]; then
-echo -e "  后端目录:   ${YELLOW}${REMOTE_SERVER_DIR}${NC}"
-fi
-if [ "$DEPLOY_MODE" != "server" ]; then
-echo -e "  前端目录:   ${YELLOW}${REMOTE_ADMIN_DIR}${NC}"
+case "$DEPLOY_MODE" in server|all)
+echo -e "  后端目录:   ${YELLOW}${REMOTE_SERVER_DIR}${NC}" ;;
+esac
+case "$DEPLOY_MODE" in admin|all)
+echo -e "  前端目录:   ${YELLOW}${REMOTE_ADMIN_DIR}${NC}" ;;
+esac
+if type project_deploy_info &>/dev/null; then
+    project_deploy_info
 fi
 echo ""
 
@@ -232,7 +271,8 @@ mkdir -p "$BUILD_DIR"
 # -------------------------------------------------------
 
 remote_service_exists() {
-    ssh_run "systemctl list-unit-files ${SERVICE_NAME}.service 2>/dev/null | grep -q ${SERVICE_NAME}"
+    local svc="${1:-$SERVICE_NAME}"
+    ssh_run "systemctl list-unit-files ${svc}.service 2>/dev/null | grep -q ${svc}"
 }
 
 remote_port_in_use() {
@@ -322,61 +362,55 @@ deploy_server() {
     echo -e "${YELLOW}[后端] 上传到服务器...${NC}"
     check_remote_owner "$REMOTE_SERVER_DIR" "后端"
     ssh_run "mkdir -p ${REMOTE_SERVER_DIR}"
-    scp_to "$BUILD_DIR/$BIN_NAME" "${REMOTE_SERVER_DIR}/$BIN_NAME"
+    # 先传临时名再 mv 替换: 直接覆盖运行中的二进制会报 Text file busy
+    scp_to "$BUILD_DIR/$BIN_NAME" "${REMOTE_SERVER_DIR}/${BIN_NAME}.new"
     scp_to "$BUILD_DIR/config.yaml" "${REMOTE_SERVER_DIR}/config.yaml"
-    ssh_run "chmod +x ${REMOTE_SERVER_DIR}/$BIN_NAME"
+    ssh_run "chmod +x ${REMOTE_SERVER_DIR}/${BIN_NAME}.new && mv -f ${REMOTE_SERVER_DIR}/${BIN_NAME}.new ${REMOTE_SERVER_DIR}/${BIN_NAME}"
     mark_remote_owner "$REMOTE_SERVER_DIR"
     echo -e "${GREEN}        上传完成${NC}"
 
     if [ "$AUTO_RESTART" = "yes" ]; then
-        ensure_systemd_service
-        echo -e "${YELLOW}[后端] 重启服务 (${SERVICE_NAME})...${NC}"
-        ssh_run "systemctl restart ${SERVICE_NAME}"
-        sleep 2
-        if ssh_run "systemctl is-active --quiet ${SERVICE_NAME}"; then
-            echo -e "${GREEN}        服务运行中 (端口 ${FINAL_SERVER_PORT})${NC}"
-        else
-            echo -e "${RED}        服务启动失败，最近日志:${NC}"
-            ssh_run "journalctl -u ${SERVICE_NAME} -n 15 --no-pager" || true
-            exit 1
-        fi
+        ensure_systemd_unit "$SERVICE_NAME" "$REMOTE_SERVER_DIR" "${REMOTE_SERVER_DIR}/${SERVER_BIN_NAME}" "${PROJECT_NAME} Server (${SERVICE_NAME})"
+        restart_remote_service "$SERVICE_NAME" "端口 ${FINAL_SERVER_PORT}"
     fi
 }
 
 # -------------------------------------------------------
-# 自动创建 systemd 服务
+# 自动创建 systemd 服务 (server 与下游扩展目标共用)
+#   ensure_systemd_unit <服务名> <工作目录> <启动命令> [描述]
 # -------------------------------------------------------
-ensure_systemd_service() {
+ensure_systemd_unit() {
+    local svc="$1" workdir="$2" exec_start="$3" desc="${4:-${PROJECT_NAME} ${1}}"
     local service_exists=0 unit_dir
     # 用 grep -q 的退出码判断存在性，不解析输出。
     # 不能写 `$(... | grep -c ...) || echo 0`：服务不存在时远程 grep -c 已输出 "0"
     # 且退出码为 1，|| 再补一个 0 会拼成两行 "0\n0"——既不等于 "0" 也不为空，
     # 结果跳过创建、直接 restart 报 service not found
-    if remote_service_exists; then
+    if remote_service_exists "$svc"; then
         service_exists=1
     fi
 
     # 服务已存在时校验归属：WorkingDirectory 指向别的目录说明服务名被其他项目占用
     if [ "$service_exists" = "1" ]; then
-        unit_dir=$(ssh_run "systemctl show -p WorkingDirectory ${SERVICE_NAME} 2>/dev/null" | cut -d= -f2- | tr -d '[:space:]' || true)
-        if [ -n "$unit_dir" ] && [ "$unit_dir" != "$REMOTE_SERVER_DIR" ]; then
-            echo -e "${RED}systemd 服务 ${SERVICE_NAME} 已被其他项目使用 (WorkingDirectory=${unit_dir})${NC}"
-            echo -e "${YELLOW}请在 $(basename "$ENV_FILE") 中为当前项目设置不同的 PROJECT_NAME 或 SERVICE_NAME${NC}"
+        unit_dir=$(ssh_run "systemctl show -p WorkingDirectory ${svc} 2>/dev/null" | cut -d= -f2- | tr -d '[:space:]' || true)
+        if [ -n "$unit_dir" ] && [ "$unit_dir" != "$workdir" ]; then
+            echo -e "${RED}systemd 服务 ${svc} 已被其他项目使用 (WorkingDirectory=${unit_dir})${NC}"
+            echo -e "${YELLOW}请在 $(basename "$ENV_FILE") 中为当前项目设置不同的 PROJECT_NAME 或服务名${NC}"
             exit 1
         fi
+        return 0
     fi
 
-    if [ "$service_exists" = "0" ]; then
-        echo -e "${YELLOW}[后端] 创建 systemd 服务: ${SERVICE_NAME}...${NC}"
-        ssh_run "cat > /etc/systemd/system/${SERVICE_NAME}.service << 'UNIT'
+    echo -e "${YELLOW}[systemd] 创建服务: ${svc}...${NC}"
+    ssh_run "cat > /etc/systemd/system/${svc}.service << 'UNIT'
 [Unit]
-Description=${PROJECT_NAME} Server (${SERVICE_NAME})
+Description=${desc}
 After=network.target
 
 [Service]
 Type=simple
-WorkingDirectory=${REMOTE_SERVER_DIR}
-ExecStart=${REMOTE_SERVER_DIR}/${SERVER_BIN_NAME}
+WorkingDirectory=${workdir}
+ExecStart=${exec_start}
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -386,8 +420,24 @@ LimitNOFILE=65536
 [Install]
 WantedBy=multi-user.target
 UNIT"
-        ssh_run "systemctl daemon-reload && systemctl enable ${SERVICE_NAME}"
-        echo -e "${GREEN}        服务已创建并设为开机自启${NC}"
+    ssh_run "systemctl daemon-reload && systemctl enable ${svc}"
+    echo -e "${GREEN}        服务已创建并设为开机自启${NC}"
+}
+
+# -------------------------------------------------------
+# 重启远程服务并确认存活: restart_remote_service <服务名> [附注]
+# -------------------------------------------------------
+restart_remote_service() {
+    local svc="$1" note="${2:-}"
+    echo -e "${YELLOW}[systemd] 重启服务 (${svc})...${NC}"
+    ssh_run "systemctl restart ${svc}"
+    sleep 2
+    if ssh_run "systemctl is-active --quiet ${svc}"; then
+        echo -e "${GREEN}        服务运行中${note:+ (}${note}${note:+)}${NC}"
+    else
+        echo -e "${RED}        服务启动失败，最近日志:${NC}"
+        ssh_run "journalctl -u ${svc} -n 15 --no-pager" || true
+        exit 1
     fi
 }
 
@@ -430,7 +480,17 @@ deploy_admin() {
 case "$DEPLOY_MODE" in
     server) deploy_server ;;
     admin)  deploy_admin ;;
-    all)    deploy_server; deploy_admin ;;
+    all)
+        deploy_server
+        deploy_admin
+        for t in $PROJECT_DEPLOY_TARGETS; do
+            "project_deploy_${t}"
+        done
+        ;;
+    *)
+        # 走到这里必然是 is_project_target 校验过的下游扩展目标
+        "project_deploy_${DEPLOY_MODE}"
+        ;;
 esac
 
 rm -rf "$BUILD_DIR"

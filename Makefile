@@ -21,9 +21,10 @@ help:
 	@echo "  make dev FORCE=1      同 make dev-force"
 	@echo ""
 	@echo "发布:"
-	@echo "  make release          全量发布，等价 ./deploy.sh all"
+	@echo "  make release          全量发布，等价 ./deploy.sh all (含下游扩展目标)"
 	@echo "  make release-server   仅发布后端"
 	@echo "  make release-admin    仅发布后台前端"
+	@echo "  make release-<目标>   发布 deploy.project.sh 声明的下游扩展目标"
 	@echo "  make publish          release 的别名"
 	@echo ""
 	@echo "  多项目: make release PROJECT=shop   使用 .deploy.shop.env 发布"
@@ -51,6 +52,10 @@ release-server publish-server:
 
 release-admin publish-admin:
 	@./deploy.sh admin $(PROJECT)
+
+# 下游扩展目标 (deploy.project.sh 的 PROJECT_DEPLOY_TARGETS)，如 make release-agent
+release-%:
+	@./deploy.sh $* $(PROJECT)
 
 build: build-server build-admin
 

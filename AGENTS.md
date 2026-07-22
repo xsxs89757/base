@@ -37,9 +37,11 @@ git push -u origin main
 
 - 基底文件只在基底仓库修改。下游发现基底 bug 或需要通用功能：到基底仓库改、提交、推送，再回下游执行 `make sync-base` 合入；禁止在下游就地修改基底文件。
 - 下游业务代码只放新增文件：后端新建 model/service/handler/dto/validator 文件；前端新建 views 目录、api 文件、`router/routes/modules/` 路由文件、locales 文案文件（这些目录都是自动扫描，新增文件即生效）。
-- 基底预留了两个下游挂载点，基底仓库承诺永不修改它们（在基底中保持空实现），下游可任意编辑：
+- 基底预留了四个下游挂载点，基底仓库承诺永不修改它们（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑：
   - `server/internal/router/project.go`：注册下游业务路由。
   - `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
+  - `dev.project.sh`（仓库根，可选）：`./dev.sh` 自动加载，挂载额外本地开发服务。实现 `project_dev_start` / `project_dev_stop` / `project_dev_info` 三个函数，端口用脚本提供的 `resolve_port` 解析（自动处理占用与 `--force`）。
+  - `deploy.project.sh`（仓库根，可选）：`./deploy.sh` 自动加载，挂载额外部署目标。声明 `PROJECT_DEPLOY_TARGETS="xxx ..."` 并实现 `project_deploy_<目标>` 函数；扩展目标可单独部署（`./deploy.sh <目标>`），`all` 模式在 server/admin 之后一并执行，可复用 `ssh_run` / `scp_to` / `ensure_systemd_unit` / `restart_remote_service` 等助手。
 - 不要修改 `server/go.mod` 的 module 名（保持 `base`），否则全部 import 路径与基底 diverge，之后每次 merge 都大面积冲突。
 - 同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：基底文件取基底版本，下游业务文件取下游版本；拿不准归属时用 `git log base/main -- <文件>` 查该文件是否属于基底。
 
@@ -210,7 +212,7 @@ pnpm dev:antd
 pnpm build:antd
 
 # 部署（读取 .deploy.env，PROJECT_NAME 必填；详见 README「多项目发布」）
-./deploy.sh [server|admin|all]        # 等价 make release / release-server / release-admin
+./deploy.sh [server|admin|all|<扩展目标>]  # 等价 make release / release-server / release-admin / release-<目标>
 ./deploy.sh all <项目名>              # 同仓库多目标：读取 .deploy.<项目名>.env
 ./deploy.sh --list                    # 列出已有部署配置
 ```
