@@ -206,12 +206,17 @@ git push -u origin main
 make sync-base   # 等价 git fetch base && git merge base/main
 ```
 
-下游开发约定（保证 merge 基本无冲突）：
+下游开发约定（按 sync-base 合并成本分两类）：
 
-- 基底文件只在基底仓库改，改完在各下游 `make sync-base` 合入；
-- 业务代码放新增文件；路由和模型用两个专属挂载点注册（基底永不改动它们）：
-  `server/internal/router/project.go`、`server/internal/store/project.go`；
-- 不改 `server/go.mod` 的 module 名（保持 `base`）。
+- **核心框架不建议就地改**（server 框架层、admin 的 vben 封装）：这些文件基底
+  会持续更新，下游改了每次同步都要重复解决冲突——通用改进请回流基底仓库，
+  改完各下游 `make sync-base` 合入；
+- **其余自由改**：CLAUDE.md / README / dev.sh / deploy.sh / Makefile 等脚手架
+  和文档尽管项目化；业务代码放新增文件；路由和模型用两个专属挂载点注册
+  （基底永不改动它们）：`server/internal/router/project.go`、
+  `server/internal/store/project.go`；
+- 唯一硬性禁令：不改 `server/go.mod` 的 module 名（保持 `base`），否则 import
+  路径全面 diverge，之后每次 merge 大面积冲突。
 
 详细纪律见 CLAUDE.md / AGENTS.md 的「基底与下游项目」一节。
 

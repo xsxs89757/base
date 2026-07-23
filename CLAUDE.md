@@ -35,15 +35,31 @@ git push -u origin main
 
 ### 下游开发纪律
 
-- 基底文件只在基底仓库修改。下游发现基底 bug 或需要通用功能：到基底仓库改、提交、推送，再回下游执行 `make sync-base` 合入；禁止在下游就地修改基底文件。
-- 下游业务代码只放新增文件：后端新建 model/service/handler/dto/validator 文件；前端新建 views 目录、api 文件、`router/routes/modules/` 路由文件、locales 文案文件（这些目录都是自动扫描，新增文件即生效）。
-- 基底预留了四个下游挂载点，基底仓库承诺永不修改它们（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑：
-  - `server/internal/router/project.go`：注册下游业务路由。
-  - `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
-  - `dev.project.sh`（仓库根，可选）：`./dev.sh` 自动加载，挂载额外本地开发服务。实现 `project_dev_start` / `project_dev_stop` / `project_dev_info` 三个函数，端口用脚本提供的 `resolve_port` 解析（自动处理占用与 `--force`）。
-  - `deploy.project.sh`（仓库根，可选）：`./deploy.sh` 自动加载，挂载额外部署目标。声明 `PROJECT_DEPLOY_TARGETS="xxx ..."` 并实现 `project_deploy_<目标>` 函数；扩展目标可单独部署（`./deploy.sh <目标>`），`all` 模式在 server/admin 之后一并执行，可复用 `ssh_run` / `scp_to` / `ensure_systemd_unit` / `restart_remote_service` 等助手。
-- 不要修改 `server/go.mod` 的 module 名（保持 `base`），否则全部 import 路径与基底 diverge，之后每次 merge 都大面积冲突。
-- 同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：基底文件取基底版本，下游业务文件取下游版本；拿不准归属时用 `git log base/main -- <文件>` 查该文件是否属于基底。
+按后续 `make sync-base` 的合并成本，把文件分为两类：
+
+**核心文件——不建议在下游就地修改，优先到基底仓库改、推送后回下游 `make sync-base` 合入：**
+
+- `server/` 框架层：`config/`、`internal/middleware/`、`internal/store/store.go`、`internal/dto/base.go`，以及基底自带的 `model/admin/`、`service/admin/`、`handler/admin/`、`validator/`、`router/admin.go`、`main.go`。
+- `admin/` 的 vben 框架部分：`packages/`、`internal/` 等封装层。
+- `server/go.mod` 的 module 名必须保持 `base`（唯一硬性禁令）：改名会让全部 import 路径与基底 diverge，之后每次 merge 大面积冲突。
+
+这些文件基底会持续修 bug、加功能，下游就地改会在每次同步时反复冲突。确有基底满足不了的项目特殊需求时也可以改，但要自己承担后续的合并成本；通用性的改进请回流基底，所有项目受益。
+
+**其余文件下游可自由修改**（工程脚手架和文档本来就该项目化）：
+
+- `CLAUDE.md` / `AGENTS.md` / `README.md`——改成项目自己的说明。
+- `dev.sh`、`deploy.sh`、`Makefile`、`.gitignore`、各类 `*.example` 配置模板；直接改允许，但想完全避开同步冲突，优先用下面的脚本挂载点扩展。
+- 前端业务区 `admin/apps/web-antd/src/`（views、api、`router/routes/modules/`、locales、adapter 微调）。
+- 后端业务代码：新增 model/service/handler/dto/validator 文件（目录自动扫描，新增即生效）。
+
+**四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突：
+
+- `server/internal/router/project.go`：注册下游业务路由。
+- `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
+- `dev.project.sh`（仓库根，可选）：`./dev.sh` 自动加载，挂载额外本地开发服务。实现 `project_dev_start` / `project_dev_stop` / `project_dev_info` 三个函数，端口用脚本提供的 `resolve_port` 解析（自动处理占用与 `--force`）。
+- `deploy.project.sh`（仓库根，可选）：`./deploy.sh` 自动加载，挂载额外部署目标。声明 `PROJECT_DEPLOY_TARGETS="xxx ..."` 并实现 `project_deploy_<目标>` 函数；扩展目标可单独部署（`./deploy.sh <目标>`），`all` 模式在 server/admin 之后一并执行，可复用 `ssh_run` / `scp_to` / `ensure_systemd_unit` / `restart_remote_service` 等助手。
+
+同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：下游没改过的基底文件取基底版本；下游改过的文件（脚本/文档/业务代码）人工合并——保留下游定制、吸收基底修复；拿不准某文件归属时用 `git log base/main -- <文件>` 查它是否来自基底。
 
 ## 工作原则
 
