@@ -41,7 +41,7 @@ git push -u origin main
 
 - `server/` 框架层：`config/`、`internal/middleware/`、`internal/store/store.go`、`internal/dto/base.go`，以及基底自带的 `model/admin/`、`service/admin/`、`handler/admin/`、`validator/`、`router/admin.go`、`main.go`。
 - `admin/` 的 vben 框架部分：`packages/`、`internal/` 等封装层。
-- `server/go.mod` 的 module 名必须保持 `base`（唯一硬性禁令）：改名会让全部 import 路径与基底 diverge，之后每次 merge 大面积冲突。
+- `server/go.mod`：仅限制 **module 名必须保持 `base`**（唯一硬性禁令）——改名会让全部 import 路径与基底 diverge，之后每次 merge 大面积冲突。**新增依赖不受限**，见下。
 
 这些文件基底会持续修 bug、加功能，下游就地改会在每次同步时反复冲突。确有基底满足不了的项目特殊需求时也可以改，但要自己承担后续的合并成本；通用性的改进请回流基底，所有项目受益。
 
@@ -51,6 +51,7 @@ git push -u origin main
 - `dev.sh`、`deploy.sh`、`Makefile`、`.gitignore`、各类 `*.example` 配置模板；直接改允许，但想完全避开同步冲突，优先用下面的脚本挂载点扩展。
 - 前端业务区 `admin/apps/web-antd/src/`（views、api、`router/routes/modules/`、locales、adapter 微调）。
 - 后端业务代码：新增 model/service/handler/dto/validator 文件（目录自动扫描，新增即生效）。
+- `server/go.mod` / `go.sum` 新增依赖：下游按业务需要 `go get` 即可（module 名不动就行）；sync-base 冲突时保留双方依赖行、跑一次 `go mod tidy`。前端 `package.json` 加依赖同理。
 
 **四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突：
 

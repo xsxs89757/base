@@ -215,8 +215,9 @@ make sync-base   # 等价 git fetch base && git merge base/main
   和文档尽管项目化；业务代码放新增文件；路由和模型用两个专属挂载点注册
   （基底永不改动它们）：`server/internal/router/project.go`、
   `server/internal/store/project.go`；
-- 唯一硬性禁令：不改 `server/go.mod` 的 module 名（保持 `base`），否则 import
-  路径全面 diverge，之后每次 merge 大面积冲突。
+- 唯一硬性禁令：不改 `server/go.mod` 的 **module 名**（保持 `base`），否则 import
+  路径全面 diverge，之后每次 merge 大面积冲突；**新增依赖不受限**——`go get`
+  照常用，同步冲突时合并双方依赖行后 `go mod tidy` 即可。
 
 详细纪律见 CLAUDE.md / AGENTS.md 的「基底与下游项目」一节。
 
