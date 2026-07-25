@@ -6,6 +6,7 @@ server:
   swagger_title: ""          # 留空使用默认值: Admin 后台管理系统 API
   swagger_desc: ""           # 留空使用默认值
   op_log_retention_days: 0   # 操作日志保留天数，0=永久保留，建议生产设 90
+  body_limit_mb: 0           # 请求体大小上限(MB)，0=Fiber 默认 4MB；上传大文件时调大
 
 database:
   driver: sqlite                # sqlite / mysql / postgres / sqlserver (sqlite 为纯 Go 驱动，支持 CGO_ENABLED=0 交叉编译)

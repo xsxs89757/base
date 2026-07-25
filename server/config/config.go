@@ -23,6 +23,8 @@ type ServerConfig struct {
 	SwaggerDesc   string `yaml:"swagger_desc"`
 	// 操作日志保留天数，<=0 表示永久保留（默认）
 	OpLogRetentionDays int `yaml:"op_log_retention_days"`
+	// 请求体大小上限(MB)，<=0 使用 Fiber 默认 4MB；上传大文件时按需调大
+	BodyLimitMB int `yaml:"body_limit_mb"`
 }
 
 type DatabaseConfig struct {

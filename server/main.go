@@ -46,7 +46,7 @@ func main() {
 	store.Init()
 	middleware.InitCasbin()
 
-	app := fiber.New(fiber.Config{
+	appCfg := fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {
 			code := fiber.StatusInternalServerError
 			if e, ok := err.(*fiber.Error); ok {
@@ -59,7 +59,12 @@ func main() {
 				"message": err.Error(),
 			})
 		},
-	})
+	}
+	// 请求体上限走配置（server.body_limit_mb），未配置时保持 Fiber 默认 4MB
+	if config.C.Server.BodyLimitMB > 0 {
+		appCfg.BodyLimit = config.C.Server.BodyLimitMB * 1024 * 1024
+	}
+	app := fiber.New(appCfg)
 
 	app.Use(recover.New())
 	app.Use(logger.New())
