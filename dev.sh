@@ -243,6 +243,13 @@ trap cleanup SIGINT SIGTERM
 #                      (自动处理占用/强制模式/与已分配端口去重)，后台启动服务并记下 PID
 #   project_dev_stop   Ctrl+C 清理时调用: 用 kill_tree <PID> 停掉自己启动的服务
 #   project_dev_info   启动汇总里追加打印服务地址行
+#
+# ⚠️ 启动时机：**要给后端进程注入环境变量的服务，别放 project_dev_start**——
+# 本文件在此处 source，而 project_dev_start 是在后端 air 起来之后才调用的，
+# 那时再 export 后端已经看不到了（export 只影响之后 fork 的子进程）。这类服务
+# 直接写在 dev.project.sh 的顶层（源载即执行）：那时 resolve_port / kill_tree
+# 等助手已就绪，唯独后端端口尚未解析（在本段之后），需要它的服务才留给
+# project_dev_start。
 if [ -f "$ROOT_DIR/dev.project.sh" ]; then
     source "$ROOT_DIR/dev.project.sh"
 fi
