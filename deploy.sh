@@ -349,7 +349,16 @@ deploy_server() {
     SWAG_BIN="$(go env GOPATH)/bin/swag"
     if [ -f "$SWAG_BIN" ]; then
         echo -e "        生成 Swagger 文档..."
-        "$SWAG_BIN" init -g main.go -o docs --parseDependency || true
+        # 与 dev.sh 同策略：滤掉 600+ 行流水账，只留警告/报错（不用 -q，它把警告也吞了）
+        local swag_log
+        swag_log=$(mktemp)
+        if "$SWAG_BIN" init -g main.go -o docs --parseDependency >"$swag_log" 2>&1; then
+            grep -vE 'Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at ' "$swag_log" | sed 's/^/        /' || true
+        else
+            echo -e "${RED}        Swagger 生成失败（继续用上一次的文档）:${NC}"
+            tail -20 "$swag_log" | sed 's/^/        /'
+        fi
+        rm -f "$swag_log"
     fi
 
     BIN_NAME="$SERVER_BIN_NAME"

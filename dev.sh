@@ -277,11 +277,24 @@ if [ ! -f go.sum ]; then
 fi
 
 # generate swagger docs
+# swag 每次要刷 600+ 行流水账（每个生成的类型一行 "Generating x"，每个它读不懂的
+# 第三方类型一行 "TypeSpecDef is nil"），把「route ... declared multiple times」
+# 这类真该处理的警告冲得看不见。这里只滤掉流水账——不用 swag 自己的 -q，那个把
+# 警告和报错也一并吞了。
+SWAG_NOISE='Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at '
 SWAG_BIN=$(go env GOPATH)/bin/swag
 if [ -f "$SWAG_BIN" ]; then
     echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
-    "$SWAG_BIN" init -g main.go -o docs --parseDependency || true
-    echo -e "${GREEN}      Swagger 文档已生成${NC}"
+    SWAG_LOG=$(mktemp)
+    if "$SWAG_BIN" init -g main.go -o docs --parseDependency >"$SWAG_LOG" 2>&1; then
+        grep -vE "$SWAG_NOISE" "$SWAG_LOG" | sed 's/^/      /' || true
+        echo -e "${GREEN}      Swagger 文档已生成${NC}"
+    else
+        # 失败时不过滤：报错往往就藏在被滤掉的那类行的上下文里
+        echo -e "${RED}      Swagger 生成失败（继续启动，文档用上一次的）:${NC}"
+        tail -20 "$SWAG_LOG" | sed 's/^/      /'
+    fi
+    rm -f "$SWAG_LOG"
 else
     echo -e "${YELLOW}      swag 未安装，跳过文档生成 (go install github.com/swaggo/swag/cmd/swag@latest)${NC}"
 fi
