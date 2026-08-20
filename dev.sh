@@ -342,13 +342,18 @@ if [ ! -f go.sum ]; then
     go mod tidy
 fi
 
-# generate swagger docs
+# generate swagger docs（docs 已随仓库提交，此步只为保持与代码同步；失败不影响启动）
 # swag 每次要刷 600+ 行流水账（每个生成的类型一行 "Generating x"，每个它读不懂的
 # 第三方类型一行 "TypeSpecDef is nil"），把「route ... declared multiple times」
 # 这类真该处理的警告冲得看不见。这里只滤掉流水账——不用 swag 自己的 -q，那个把
 # 警告和报错也一并吞了。
 SWAG_NOISE='Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at '
 SWAG_BIN="$GOPATH_DIR/bin/swag$EXE"
+# docs 缺失（如被误删）且 swag 未装时必须现装现生成，否则 main.go 的 base/docs import 编译不过
+if [ ! -f "$SWAG_BIN" ] && [ ! -f docs/docs.go ]; then
+    echo -e "${YELLOW}      docs/ 缺失且 swag 未安装，安装 swag (Go Swagger 生成工具)...${NC}"
+    go install github.com/swaggo/swag/cmd/swag@latest
+fi
 if [ -f "$SWAG_BIN" ]; then
     echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
     SWAG_LOG=$(mktemp)
@@ -357,8 +362,13 @@ if [ -f "$SWAG_BIN" ]; then
         echo -e "${GREEN}      Swagger 文档已生成${NC}"
     else
         # 失败时不过滤：报错往往就藏在被滤掉的那类行的上下文里
-        echo -e "${RED}      Swagger 生成失败（继续启动，文档用上一次的）:${NC}"
+        echo -e "${YELLOW}      Swagger 生成失败（不影响启动，继续用仓库内已有 docs）:${NC}"
         tail -20 "$SWAG_LOG" | sed 's/^/      /'
+        # swag 中途失败可能把 docs/ 写坏（docs.go 缺失会让 go build 编译不过、air 起不来），从 git 恢复
+        if [ ! -f docs/docs.go ]; then
+            echo -e "${YELLOW}      docs/docs.go 缺失，从 git 恢复 docs/ ...${NC}"
+            git checkout -- docs 2>/dev/null || true
+        fi
     fi
     rm -f "$SWAG_LOG"
 else

@@ -23,7 +23,9 @@ server/*.exe
 server/tmp
 server/config.yaml
 server/config.prod.yaml
-server/docs
+# server/docs 不再忽略：main.go import base/docs，fresh clone 若无该目录直接编译失败
+# （"package base/docs is not in std"），Windows/CI 上未装 swag 就起不来。生成物随仓库提交，
+# API 变更后用 swag init 重新生成并一起提交。
 
 # Deploy
 .deploy.env

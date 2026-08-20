@@ -95,7 +95,7 @@ pnpm dev:antd
 │   ├── .air.toml                # air 热更新配置 (macOS/Linux)
 │   ├── .air.windows.toml        # air 热更新配置 (Windows，dev.sh 自动选用)
 │   ├── config/                  # 配置解析
-│   ├── docs/                    # Swagger 自动生成文档
+│   ├── docs/                    # Swagger 生成物 (随仓库提交，main.go 依赖它编译)
 │   └── internal/
 │       ├── dto/                 # 数据传输对象
 │       │   ├── admin/           # 后台管理 DTO

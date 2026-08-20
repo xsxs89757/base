@@ -68,7 +68,7 @@ git push -u origin main
 - 涉及完整功能时，后端、前端、路由、权限、i18n、Swagger 文档一起处理，不只改单层。
 - 保持改动范围小。不要顺手重构无关模块，不要引入未使用依赖。
 - 不要提交或依赖本地敏感配置：`.deploy.env`、`.deploy.*.env`、`server/config.yaml`、`server/config.prod.yaml`。
-- `server/docs/` 是 Swagger 生成物；只有 API 变更需要同步生成时才更新。
+- `server/docs/` 是 Swagger 生成物，但**随仓库提交**：`main.go` import 了 `base/docs`，不提交会让 fresh clone（新下游项目/CI/未装 swag 的同事）直接编译失败（`package base/docs is not in std`）。API 变更后重新生成并与代码一起提交，其余时候不用动。
 
 ## 后端开发规则
 
