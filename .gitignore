@@ -16,8 +16,10 @@ Thumbs.db
 .claude
 
 # Go
-server/data.db
-server/data.db-*
+# data.db* 一并覆盖主库与 -shm/-wal/-journal 伴生文件。伴生文件绝不能入库：
+# 主库被忽略而 WAL 被提交时，fresh clone 只有陈旧 WAL 没有主库，SQLite 拿旧 WAL
+# 套空库直接报 "malformed database schema ... no such table"（下游 laitui 踩过）。
+server/data.db*
 server/server
 server/*.exe
 server/tmp

@@ -133,6 +133,7 @@ swag init -g main.go -o docs --parseDependency --parseInternal
 - `map[string]any` 做 `Updates` 时，key 必须是数据库列名，也就是 snake_case，不是 Go 字段名。
 - 同一字段禁止同时写 `uniqueIndex` 和 `index`（如 `gorm:"uniqueIndex;index"`）：两个未命名标签会生成同名默认索引，同一列被并入一个索引两次，MySQL AutoMigrate 报 `1060 Duplicate column name`；本地 SQLite 不报错，这类问题只在 MySQL 上暴露。`uniqueIndex` 本身就是索引，不要再叠加 `index`。
 - 涉及索引/建表的模型改动，上线前用 MySQL 完整启动验证一次，不要只依赖本地 SQLite。
+- SQLite 的 `data.db-wal` / `data.db-shm` 伴生文件**绝不能提交**（`.gitignore` 已用 `server/data.db*` 覆盖）：主库被忽略而 WAL 入库时，fresh clone 只有陈旧 WAL 没有主库，启动直接报 `malformed database schema ... no such table`。下游若发现这两个文件已被跟踪，用 `git rm --cached server/data.db-shm server/data.db-wal` 移除。
 - 改 model 字段后需要完整重启后端，让 AutoMigrate 重新执行；只看前端热更新不够。
 - 复杂写操作使用事务，查询注意预加载和索引，避免 N+1。
 
