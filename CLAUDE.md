@@ -216,6 +216,7 @@ bash -n dev.sh && bash -n deploy.sh
 # 一键启动前后端（默认：端口被占用时自动改用空闲端口，可同机多项目并行）
 ./dev.sh          # 等价 make dev
 ./dev.sh --force  # 杀死占用进程、坚持用配置端口，等价 make dev-force
+# Windows 在 Git Bash 中运行：脚本自动改用 server/.air.windows.toml / netstat / taskkill
 
 # 后端开发
 cd server

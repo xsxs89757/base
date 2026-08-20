@@ -1,0 +1,30 @@
+# Windows 专用 air 配置：在 server/ 下执行 `air -c .air.windows.toml`（dev.sh 在 Git Bash 下会自动选用）。
+# 与 .air.toml 的差异：
+# 1. 去掉 CGO_LDFLAGS=-w 前缀——那是 Unix shell 的内联环境变量语法（仅为压 macOS ld 警告），
+#    PowerShell/cmd 都不支持；且本项目为纯 Go 依赖（无 CGO），Windows 上根本不需要该变量。
+# 2. 产物加 .exe 后缀，否则 Windows 无法执行。
+# 3. 去掉 send_interrupt——Windows 不支持向进程发 SIGINT，air 会直接结束进程。
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  bin = "tmp\\server.exe"
+  cmd = "go build -o ./tmp/server.exe ."
+  delay = 1000
+  exclude_dir = ["tmp", "docs", "vendor"]
+  exclude_regex = ["_test.go"]
+  include_ext = ["go", "yaml"]
+  kill_delay = "0s"
+  stop_on_error = true
+
+[color]
+  build = "yellow"
+  main = "magenta"
+  runner = "green"
+  watcher = "cyan"
+
+[log]
+  main_only = true
+
+[misc]
+  clean_on_exit = true

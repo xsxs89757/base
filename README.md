@@ -47,6 +47,11 @@ make dev-force
 
 后端修改 `.go` 文件后自动重新编译，前端修改即时热更新。按 `Ctrl+C` 停止所有服务。
 
+**Windows 用户**：在 **Git Bash** 中运行 `./dev.sh`（随 Git for Windows 附带，勿用
+PowerShell/cmd）。脚本会自动切换到 Windows 实现——air 改用 `server/.air.windows.toml`
+（无 Unix 内联环境变量前缀、产物带 `.exe`）、端口探测改用 `netstat`、结束进程改用
+`taskkill`，其余用法与 macOS/Linux 完全一致。
+
 ### 手动启动
 
 **后端：**
@@ -87,7 +92,8 @@ pnpm dev:antd
 ├── server/                      # Go 后端
 │   ├── main.go                  # 入口文件
 │   ├── config.yaml.example      # 配置模板
-│   ├── .air.toml                # air 热更新配置
+│   ├── .air.toml                # air 热更新配置 (macOS/Linux)
+│   ├── .air.windows.toml        # air 热更新配置 (Windows，dev.sh 自动选用)
 │   ├── config/                  # 配置解析
 │   ├── docs/                    # Swagger 自动生成文档
 │   └── internal/

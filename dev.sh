@@ -15,6 +15,16 @@ ADMIN_PID=""
 ADMIN_PORT="${ADMIN_PORT:-5666}"
 FORCE_MODE=0
 
+# --- Windows 适配（Git Bash / MSYS / Cygwin）---
+# Windows 上请在 Git Bash 中运行本脚本；自动切换：
+# air 用 .air.windows.toml（无 Unix 环境变量前缀 + .exe 产物）、端口探测用 netstat、杀进程用 taskkill。
+IS_WINDOWS=0
+case "$(uname -s 2>/dev/null)" in
+    MINGW*|MSYS*|CYGWIN*) IS_WINDOWS=1 ;;
+esac
+EXE=""
+[ "$IS_WINDOWS" = "1" ] && EXE=".exe"
+
 usage() {
     echo -e "${CYAN}用法: ./dev.sh [--force|-f]${NC}"
     echo ""
@@ -23,6 +33,9 @@ usage() {
     echo "  --help, -h   显示帮助"
     echo ""
     echo "  仓库根存在 dev.project.sh 时会一并启动下游扩展服务"
+    echo ""
+    echo "  Windows 用户请在 Git Bash 中运行（随 Git for Windows 附带），"
+    echo "  脚本会自动改用 .air.windows.toml / netstat / taskkill"
     exit "${1:-0}"
 }
 
@@ -49,11 +62,31 @@ SERVER_PORT=${SERVER_PORT:-8080}
 get_port_pids() {
     local port="$1"
 
-    if ! command -v lsof &>/dev/null; then
+    if command -v lsof &>/dev/null; then
+        lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
         return 0
     fi
 
-    lsof -nP -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+    # Windows(Git Bash) 没有 lsof，用系统 netstat 解析监听 PID
+    # 行格式: TCP    0.0.0.0:8080    0.0.0.0:0    LISTENING    1234
+    if [ "$IS_WINDOWS" = "1" ] && command -v netstat &>/dev/null; then
+        netstat -ano -p tcp 2>/dev/null \
+            | awk -v p=":$port" '$1 == "TCP" && $4 == "LISTENING" && substr($2, length($2) - length(p) + 1) == p {print $5}' \
+            | sort -u || true
+    fi
+}
+
+# 跨平台杀单个进程：Windows 用 taskkill（Git Bash 的 kill 杀不动原生 Windows 进程）
+kill_pid() {
+    local pid="$1" force="$2"
+
+    if [ "$IS_WINDOWS" = "1" ]; then
+        taskkill //PID "$pid" //F >/dev/null 2>&1 || true
+    elif [ "$force" = "1" ]; then
+        kill -9 "$pid" 2>/dev/null || true
+    else
+        kill "$pid" 2>/dev/null || true
+    fi
 }
 
 collect_kill_pids_for_port() {
@@ -62,6 +95,9 @@ collect_kill_pids_for_port() {
 
     for pid in $(get_port_pids "$port"); do
         echo "$pid"
+
+        # Git Bash 的 ps 看不到原生 Windows 进程树，跳过父进程(air)探测
+        [ "$IS_WINDOWS" = "1" ] && continue
 
         ppid=$(ps -p "$pid" -o ppid= 2>/dev/null | tr -d ' ' || true)
         [ -z "$ppid" ] && continue
@@ -84,10 +120,12 @@ print_processes() {
     local pid cmd port_info
 
     for pid in $pids; do
-        port_info=$(lsof -nP -a -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR == 2 {print $1 " " $2 " " $9}' || true)
-        if [ -n "$port_info" ]; then
-            echo -e "        $port_info"
-            continue
+        if command -v lsof &>/dev/null; then
+            port_info=$(lsof -nP -a -p "$pid" -iTCP -sTCP:LISTEN 2>/dev/null | awk 'NR == 2 {print $1 " " $2 " " $9}' || true)
+            if [ -n "$port_info" ]; then
+                echo -e "        $port_info"
+                continue
+            fi
         fi
 
         cmd=$(ps -p "$pid" -o command= 2>/dev/null || true)
@@ -112,15 +150,15 @@ kill_port_listeners() {
     print_processes "$pids"
 
     for pid in $pids; do
-        kill "$pid" 2>/dev/null || true
+        kill_pid "$pid" 0
     done
     sleep 1
 
     remaining=$(collect_kill_pids_for_port "$port" | format_pids)
     if [ -n "$remaining" ]; then
-        echo -e "${YELLOW}      进程仍未退出，执行 kill -9: $remaining${NC}"
+        echo -e "${YELLOW}      进程仍未退出，强制结束: $remaining${NC}"
         for pid in $remaining; do
-            kill -9 "$pid" 2>/dev/null || true
+            kill_pid "$pid" 1
         done
         sleep 1
     fi
@@ -219,6 +257,14 @@ collect_tree() {
 
 kill_tree() {
     local pids
+
+    # Windows: Git Bash 的 pgrep/kill 既看不到也杀不动原生进程树，
+    # 用 taskkill //T 让系统连同子进程(server.exe / node)一起结束
+    if [ "$IS_WINDOWS" = "1" ]; then
+        taskkill //PID "$1" //T //F >/dev/null 2>&1 || true
+        return 0
+    fi
+
     pids=$(collect_tree "$1" | tr '\n' ' ')
     [ -n "$pids" ] && kill $pids 2>/dev/null
     return 0
@@ -230,7 +276,18 @@ cleanup() {
     [ -n "$AIR_PID" ] && kill_tree "$AIR_PID" && echo -e "${GREEN}后端已停止${NC}"
     [ -n "$ADMIN_PID" ] && kill_tree "$ADMIN_PID" && echo -e "${GREEN}前端已停止${NC}"
     type project_dev_stop &>/dev/null && project_dev_stop
-    pkill -P $$ 2>/dev/null
+    command -v pkill &>/dev/null && pkill -P $$ 2>/dev/null
+
+    # Windows 下杀 bash 作业不一定连带结束原生子进程，按本次已分配的端口兜底清一遍
+    # (CLAIMED_PORTS 覆盖后端/前端及 dev.project.sh 扩展服务)
+    if [ "$IS_WINDOWS" = "1" ]; then
+        local p pid
+        for p in $CLAIMED_PORTS; do
+            for pid in $(get_port_pids "$p"); do
+                kill_pid "$pid" 1
+            done
+        done
+    fi
     exit 0
 }
 
@@ -269,7 +326,9 @@ ADMIN_PORT="$RESOLVED_PORT"
 export SERVER_PORT
 
 # --- 检查 air ---
-AIR_BIN="$(go env GOPATH)/bin/air"
+# go env GOPATH 在 Windows 返回反斜杠路径，统一成正斜杠供 bash 使用
+GOPATH_DIR="$(go env GOPATH | tr '\\' '/')"
+AIR_BIN="$GOPATH_DIR/bin/air$EXE"
 if [ ! -f "$AIR_BIN" ]; then
     echo -e "${YELLOW}安装 air (Go 热更新工具)...${NC}"
     go install github.com/air-verse/air@latest
@@ -289,7 +348,7 @@ fi
 # 这类真该处理的警告冲得看不见。这里只滤掉流水账——不用 swag 自己的 -q，那个把
 # 警告和报错也一并吞了。
 SWAG_NOISE='Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at '
-SWAG_BIN=$(go env GOPATH)/bin/swag
+SWAG_BIN="$GOPATH_DIR/bin/swag$EXE"
 if [ -f "$SWAG_BIN" ]; then
     echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
     SWAG_LOG=$(mktemp)
@@ -306,7 +365,13 @@ else
     echo -e "${YELLOW}      swag 未安装，跳过文档生成 (go install github.com/swaggo/swag/cmd/swag@latest)${NC}"
 fi
 
-"$AIR_BIN" &
+# Windows 用专用配置：.air.toml 的 build cmd 带 Unix 内联环境变量前缀(CGO_LDFLAGS=-w)，
+# PowerShell/cmd 不支持该语法，且产物需要 .exe 后缀
+if [ "$IS_WINDOWS" = "1" ]; then
+    "$AIR_BIN" -c .air.windows.toml &
+else
+    "$AIR_BIN" &
+fi
 AIR_PID=$!
 sleep 3
 
