@@ -47,6 +47,27 @@ make dev-force
 
 后端修改 `.go` 文件后自动重新编译，前端修改即时热更新。按 `Ctrl+C` 停止所有服务。
 
+### 公网调试（穿云内网穿透，可选）
+
+微信/支付回调、手机真机联调、把本地页面发给别人看，都需要一个公网地址。装好
+[穿云](https://github.com/xsxs89757/chuanyun) 桌面客户端并登录后，`./dev.sh` 会自动
+把前后端各挂一条隧道，地址固定、重启不变：
+
+```
+  前端:    http://localhost:5666
+  后端:    http://localhost:8080
+  公网:    https://<用户>-<项目>-api.<域名>     (穿云 -> 后端)
+  ➜  穿云:  https://<用户>-<项目>-admin.<域名>  (前端 dev server)
+```
+
+- **穿云没装/没开/没登录时全部静默跳过**，本地开发照常，不会因此启动失败；
+- 隧道名按项目区分（取 `.deploy.env` 的 `PROJECT_NAME`，没有则用仓库目录名），
+  同一台机器跑多个项目互不抢名字；
+- 端口自动避让后隧道会跟着指向真实端口，上次残留的隧道会先清掉再重建；
+- 退出时两条隧道都会注销；
+- 后端进程可读环境变量 `CHUANYUN_PUBLIC_URL` 拼回调地址（未接入时为空，业务代码自行回落本地）；
+- 本次不想用：`./dev.sh --no-chuanyun`（等价 `CHUANYUN=0 ./dev.sh`）。
+
 **Windows 用户**：在 **Git Bash** 中运行 `./dev.sh`（随 Git for Windows 附带，勿用
 PowerShell/cmd）。脚本会自动切换到 Windows 实现——air 改用 `server/.air.windows.toml`
 （无 Unix 内联环境变量前缀、产物带 `.exe`）、端口探测改用 `netstat`、结束进程改用

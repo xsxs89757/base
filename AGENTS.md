@@ -218,6 +218,8 @@ bash -n dev.sh && bash -n deploy.sh
 ./dev.sh          # 等价 make dev
 ./dev.sh --force  # 杀死占用进程、坚持用配置端口，等价 make dev-force
 # Windows 在 Git Bash 中运行：脚本自动改用 server/.air.windows.toml / netstat / taskkill
+# 装了穿云客户端时自动给前后端各建一条公网隧道（没装/没开则静默跳过）；
+# 关闭用 ./dev.sh --no-chuanyun。后端可读 CHUANYUN_PUBLIC_URL 拼回调地址
 
 # 后端开发
 cd server

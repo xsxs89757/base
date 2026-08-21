@@ -25,11 +25,23 @@ esac
 EXE=""
 [ "$IS_WINDOWS" = "1" ] && EXE=".exe"
 
+# --- 穿云内网穿透（可选）---
+# 给后端端口挂一个固定公网地址：微信/支付回调、手机真机联调、演示给别人看。
+# 穿云客户端没装/没开/没登录时全部静默跳过——这是可选便利，不该拦住本地开发。
+# 关闭：./dev.sh --no-chuanyun 或 CHUANYUN=0 ./dev.sh
+CHUANYUN_API_PORT="${CHUANYUN_API_PORT:-7075}"
+CHUANYUN_ENABLED=1
+[ "${CHUANYUN:-}" = "0" ] && CHUANYUN_ENABLED=0
+CHUANYUN_TUNNEL=""       # 后端隧道名（dev.sh 自己注册）
+CHUANYUN_WEB_TUNNEL=""   # 前端隧道名（vite 插件注册，dev.sh 负责清理残留）
+CHUANYUN_PUBLIC_URL=""
+
 usage() {
     echo -e "${CYAN}用法: ./dev.sh [--force|-f]${NC}"
     echo ""
     echo "  默认:        端口被占用时自动改用空闲端口启动 (不影响其他项目)"
     echo "  --force, -f  杀死占用后端/前端开发端口的进程，坚持使用配置端口"
+    echo "  --no-chuanyun 本次不接入穿云内网穿透 (等价 CHUANYUN=0)"
     echo "  --help, -h   显示帮助"
     echo ""
     echo "  仓库根存在 dev.project.sh 时会一并启动下游扩展服务"
@@ -42,6 +54,7 @@ usage() {
 for arg in "$@"; do
     case "$arg" in
         -f|--force) FORCE_MODE=1 ;;
+        --no-chuanyun) CHUANYUN_ENABLED=0 ;;
         -h|--help|help) usage 0 ;;
         *)
             echo -e "${RED}未知参数: $arg${NC}"
@@ -270,9 +283,59 @@ kill_tree() {
     return 0
 }
 
+# 项目标识：优先 .deploy.env 的 PROJECT_NAME（base 里项目身份的正源），其次仓库目录名。
+# 不 source .deploy.env——那会把 SSH_PASS 等一并带进环境
+chuanyun_slug() {
+    local slug=""
+    if [ -f "$ROOT_DIR/.deploy.env" ]; then
+        slug=$(grep -E '^[[:space:]]*PROJECT_NAME=' "$ROOT_DIR/.deploy.env" 2>/dev/null \
+            | head -1 | cut -d= -f2- | tr -d '"'"'"'[:space:]' || true)
+    fi
+    [ -z "$slug" ] && slug=$(basename "$ROOT_DIR")
+    echo "$slug"
+}
+
+# 注销指定隧道，失败无所谓
+chuanyun_forget() {
+    [ -z "$1" ] && return 0
+    curl -sf -m 3 -X DELETE "http://127.0.0.1:${CHUANYUN_API_PORT}/api/tunnels/$1" >/dev/null 2>&1 || true
+    return 0
+}
+
+# 注册后端隧道。任何一步失败都只是没有公网地址，不影响本地开发
+chuanyun_up() {
+    local name="$1" port="$2" url base="http://127.0.0.1:${CHUANYUN_API_PORT}"
+
+    # 穿云没在跑就安静退出
+    curl -sf -m 2 "$base/api/status" >/dev/null 2>&1 || return 0
+
+    # 先注销同名隧道再注册：dev.sh 会自动换端口，上次残留的隧道可能指向旧端口；
+    # 且穿云对已存在的名字会直接报"名称已被占用"而不是改端口
+    chuanyun_forget "$name"
+    curl -sf -m 5 -X POST "$base/api/tunnels" -H 'Content-Type: application/json' \
+        -d "[{\"port\":${port},\"name\":\"${name}\"}]" >/dev/null 2>&1 || true
+
+    url=$(curl -sf -m 3 "$base/api/resolve?port=${port}&plain=1" 2>/dev/null || true)
+    # 没有隧道时 resolve 会回落成 127.0.0.1，那不算接入成功
+    case "$url" in
+        http*://127.0.0.1*|http*://localhost*|"") return 0 ;;
+        http*://*) CHUANYUN_TUNNEL="$name"; CHUANYUN_PUBLIC_URL="$url" ;;
+    esac
+    return 0
+}
+
+chuanyun_down() {
+    chuanyun_forget "$CHUANYUN_TUNNEL"
+    # 前端隧道虽是 vite 插件建的，但插件的退出钩子在被 kill 树杀时来不及跑，
+    # 名字又是 dev.sh 注入的，这里一并收尾
+    chuanyun_forget "$CHUANYUN_WEB_TUNNEL"
+    return 0
+}
+
 cleanup() {
     echo ""
     echo -e "${YELLOW}正在关闭服务...${NC}"
+    chuanyun_down
     [ -n "$AIR_PID" ] && kill_tree "$AIR_PID" && echo -e "${GREEN}后端已停止${NC}"
     [ -n "$ADMIN_PID" ] && kill_tree "$ADMIN_PID" && echo -e "${GREEN}前端已停止${NC}"
     type project_dev_stop &>/dev/null && project_dev_stop
@@ -324,6 +387,20 @@ ADMIN_PORT="$RESOLVED_PORT"
 # 后端 config.Load 支持 SERVER_PORT 环境变量覆盖 config.yaml，
 # air 启动的服务进程会继承该变量，自动换端口才能生效
 export SERVER_PORT
+
+# 穿云接入要在启动后端之前完成：CHUANYUN_PUBLIC_URL 得先 export 出去，
+# air 之后 fork 的后端进程才拿得到（业务代码可用它拼微信/支付回调地址）
+if [ "$CHUANYUN_ENABLED" = "1" ]; then
+    CHUANYUN_WEB_TUNNEL="$(chuanyun_slug)-admin"
+    # 先清掉上次残留的前端隧道：插件是直接 POST 注册的，撞上同名会报"名称已被占用"，
+    # 结果公网地址仍指向上一次那个已经关掉的端口
+    chuanyun_forget "$CHUANYUN_WEB_TUNNEL"
+    chuanyun_up "$(chuanyun_slug)-api" "$SERVER_PORT"
+    export CHUANYUN_NAME="$CHUANYUN_WEB_TUNNEL"     # 前端隧道名，vite 插件读它
+else
+    export CHUANYUN=0                                # 让 vite 插件一并跳过
+fi
+export CHUANYUN_PUBLIC_URL
 
 # --- 检查 air ---
 # go env GOPATH 在 Windows 返回反斜杠路径，统一成正斜杠供 bash 使用
@@ -419,6 +496,9 @@ echo ""
 echo -e "  前端:    ${CYAN}http://localhost:${ADMIN_PORT}${NC}"
 echo -e "  后端:    ${CYAN}http://localhost:${SERVER_PORT}${NC}"
 echo -e "  Swagger: ${CYAN}http://localhost:${SERVER_PORT}/swagger/index.html${NC}"
+if [ -n "$CHUANYUN_PUBLIC_URL" ]; then
+echo -e "  公网:    ${CYAN}${CHUANYUN_PUBLIC_URL}${NC} (穿云 -> 后端 ${SERVER_PORT})"
+fi
 if type project_dev_info &>/dev/null; then
     project_dev_info
 fi

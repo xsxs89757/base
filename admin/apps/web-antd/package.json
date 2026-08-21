@@ -46,5 +46,8 @@
     "pinia": "catalog:",
     "vue": "catalog:",
     "vue-router": "catalog:"
+  },
+  "devDependencies": {
+    "vite-plugin-chuanyun": "^0.1.3"
   }
 }
