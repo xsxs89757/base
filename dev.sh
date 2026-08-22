@@ -32,9 +32,9 @@ EXE=""
 CHUANYUN_API_PORT="${CHUANYUN_API_PORT:-7075}"
 CHUANYUN_ENABLED=1
 [ "${CHUANYUN:-}" = "0" ] && CHUANYUN_ENABLED=0
-CHUANYUN_TUNNEL=""       # 后端隧道名（dev.sh 自己注册）
-CHUANYUN_WEB_TUNNEL=""   # 前端隧道名（vite 插件注册，dev.sh 负责清理残留）
-CHUANYUN_PUBLIC_URL=""
+CHUANYUN_TUNNELS=""      # 本次登记的所有隧道名，退出时逐个注销（含 dev.project.sh 建的）
+CHUANYUN_PUBLIC_URL=""   # 后端公网地址，export 给后端进程拼回调用
+CHUANYUN_LAST_URL=""     # 最近一次 chuanyun_up 拿到的地址，供调用方取用
 
 usage() {
     echo -e "${CYAN}用法: ./dev.sh [--force|-f]${NC}"
@@ -302,9 +302,26 @@ chuanyun_forget() {
     return 0
 }
 
-# 注册后端隧道。任何一步失败都只是没有公网地址，不影响本地开发
+# 登记隧道名，退出时统一注销（vite 插件自己建的隧道也走这里登记）
+chuanyun_track() {
+    case " $CHUANYUN_TUNNELS " in
+        *" $1 "*) return 0 ;;
+    esac
+    CHUANYUN_TUNNELS="$CHUANYUN_TUNNELS $1"
+    return 0
+}
+
+# 给 <port> 建一条名为 <name> 的隧道，地址写入 CHUANYUN_LAST_URL（没接上则为空）。
+# dev.project.sh 里的下游服务可直接复用：
+#     chuanyun_up "$(chuanyun_slug)-web" "$WEB_PORT"; WEB_URL="$CHUANYUN_LAST_URL"
+# 任何一步失败都只是没有公网地址，不影响本地开发
 chuanyun_up() {
     local name="$1" port="$2" url base="http://127.0.0.1:${CHUANYUN_API_PORT}"
+    CHUANYUN_LAST_URL=""
+
+    # --no-chuanyun / CHUANYUN=0 时一律不建隧道。守卫放在这里而不是调用处，
+    # dev.project.sh 里的下游服务照抄示例也自动遵守这个开关
+    [ "$CHUANYUN_ENABLED" = "1" ] || return 0
 
     # 穿云没在跑就安静退出
     curl -sf -m 2 "$base/api/status" >/dev/null 2>&1 || return 0
@@ -319,16 +336,18 @@ chuanyun_up() {
     # 没有隧道时 resolve 会回落成 127.0.0.1，那不算接入成功
     case "$url" in
         http*://127.0.0.1*|http*://localhost*|"") return 0 ;;
-        http*://*) CHUANYUN_TUNNEL="$name"; CHUANYUN_PUBLIC_URL="$url" ;;
+        http*://*) chuanyun_track "$name"; CHUANYUN_LAST_URL="$url" ;;
     esac
     return 0
 }
 
 chuanyun_down() {
-    chuanyun_forget "$CHUANYUN_TUNNEL"
-    # 前端隧道虽是 vite 插件建的，但插件的退出钩子在被 kill 树杀时来不及跑，
+    local t
+    # 含前端隧道：那条虽是 vite 插件建的，但插件的退出钩子在被 kill 树杀时来不及跑，
     # 名字又是 dev.sh 注入的，这里一并收尾
-    chuanyun_forget "$CHUANYUN_WEB_TUNNEL"
+    for t in $CHUANYUN_TUNNELS; do
+        chuanyun_forget "$t"
+    done
     return 0
 }
 
@@ -395,7 +414,9 @@ if [ "$CHUANYUN_ENABLED" = "1" ]; then
     # 先清掉上次残留的前端隧道：插件是直接 POST 注册的，撞上同名会报"名称已被占用"，
     # 结果公网地址仍指向上一次那个已经关掉的端口
     chuanyun_forget "$CHUANYUN_WEB_TUNNEL"
+    chuanyun_track "$CHUANYUN_WEB_TUNNEL"           # 插件建的隧道也由 dev.sh 负责注销
     chuanyun_up "$(chuanyun_slug)-api" "$SERVER_PORT"
+    CHUANYUN_PUBLIC_URL="$CHUANYUN_LAST_URL"
     export CHUANYUN_NAME="$CHUANYUN_WEB_TUNNEL"     # 前端隧道名，vite 插件读它
 else
     export CHUANYUN=0                                # 让 vite 插件一并跳过

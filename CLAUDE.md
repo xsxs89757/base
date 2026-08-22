@@ -60,6 +60,21 @@ git push -u origin main
 - `dev.project.sh`（仓库根，可选）：`./dev.sh` 自动加载，挂载额外本地开发服务。实现 `project_dev_start` / `project_dev_stop` / `project_dev_info` 三个函数，端口用脚本提供的 `resolve_port` 解析（自动处理占用与 `--force`）。
 - `deploy.project.sh`（仓库根，可选）：`./deploy.sh` 自动加载，挂载额外部署目标。声明 `PROJECT_DEPLOY_TARGETS="xxx ..."` 并实现 `project_deploy_<目标>` 函数；扩展目标可单独部署（`./deploy.sh <目标>`），`all` 模式在 server/admin 之后一并执行，可复用 `ssh_run` / `scp_to` / `ensure_systemd_unit` / `restart_remote_service` 等助手。
 
+### 新增额外服务（如前台站点 `web/`）
+
+下游要在 server/admin 之外再加一个服务（Nuxt 前台、任务进程、第三方回调网关等）时，**不要改 `dev.sh` / `deploy.sh` 本体**，用两个脚本挂载点，同步永不冲突：
+
+1. **本地开发**：仓库根新增 `dev.project.sh`，实现三个函数。dev.sh 会 source 它并在合适时机调用，其中这些助手可以直接用：
+   - `resolve_port <端口> <名称>`：解析端口，结果在 `RESOLVED_PORT`（自动处理占用、`--force`、与本次已分配端口去重）。**必须用它**，不要自己写死端口，否则同机多项目会互相抢。
+   - `chuanyun_up <隧道名> <端口>`：建公网隧道，地址在 `CHUANYUN_LAST_URL`（穿云没开就是空字符串）。隧道名用 `$(chuanyun_slug)-xxx` 保证按项目区分；dev.sh 退出时统一注销，无需自己清理。
+   - `kill_tree <PID>`：在 `project_dev_stop` 里结束自己启动的进程树（pnpm/nuxt 都是多层包装，`kill` 单个 PID 杀不干净）。
+   - 现成变量：`ROOT_DIR`、`SERVER_PORT`（已解析）、`RED/GREEN/YELLOW/CYAN/NC` 配色。
+2. **部署**：仓库根新增 `deploy.project.sh`，声明 `PROJECT_DEPLOY_TARGETS="web"` 并实现 `project_deploy_web`，可复用 `ssh_run` / `scp_to` / `check_remote_owner` / `ensure_systemd_unit` / `restart_remote_service`。
+3. **端口约定**：新服务端口自己定默认值（如 `WEB_PORT="${WEB_PORT:-3000}"`），一律经 `resolve_port` 解析后再用；需要把端口告诉子进程时用环境变量传（`-- --port` 会被 pnpm 吞掉）。
+4. **框架拦 Host**：Vite 系（含 Nuxt 的 vite 层）会拒绝陌生 Host，经隧道访问报 `Blocked request`。前端 admin 由 `vite-plugin-chuanyun` 自动处理；自己加的服务需要把隧道域名加进该框架的 `allowedHosts`。
+
+完整可抄的 `dev.project.sh` 示例见 README「新增额外服务」一节。
+
 同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：下游没改过的基底文件取基底版本；下游改过的文件（脚本/文档/业务代码）人工合并——保留下游定制、吸收基底修复；拿不准某文件归属时用 `git log base/main -- <文件>` 查它是否来自基底。
 
 ## 工作原则

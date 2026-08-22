@@ -216,6 +216,97 @@ make release-server PROJECT=shop
 - **自动创建** systemd 服务（首次部署时）
 - **自动重启**服务并做健康检查，启动失败自动拉取最近的 journal 日志
 
+## 新增额外服务（下游）
+
+在 server/admin 之外再加一个服务（Nuxt 前台 `web/`、任务进程、回调网关等），
+**不要改 `dev.sh` / `deploy.sh` 本体**——用仓库根的两个挂载点，`make sync-base` 永不冲突。
+
+### 本地开发：`dev.project.sh`
+
+新建这个文件即可（基底不含它，也承诺永不创建）。以加一个 Nuxt 前台 `web/` 为例：
+
+```bash
+#!/bin/bash
+# dev.project.sh —— 被 ./dev.sh 自动 source
+WEB_PORT="${WEB_PORT:-3000}"
+WEB_PID=""
+WEB_URL=""
+
+project_dev_start() {
+    # 1) 解析端口：自动避开占用、遵守 --force、不与本次其他服务撞port
+    resolve_port "$WEB_PORT" "网站"
+    WEB_PORT="$RESOLVED_PORT"
+
+    echo -e "${YELLOW}[+] 启动网站 (http://localhost:${WEB_PORT})${NC}"
+    cd "$ROOT_DIR/web"
+    [ -d node_modules ] || pnpm install
+
+    # 2) 端口用环境变量传给子进程（`-- --port` 会被 pnpm 吞掉）
+    #    后端地址用已解析的 SERVER_PORT
+    WEB_PORT="$WEB_PORT" NUXT_API_BASE="http://localhost:${SERVER_PORT}/api" pnpm dev &
+    WEB_PID=$!
+    sleep 3
+
+    # 3) 要公网地址就建条隧道；穿云没开时 CHUANYUN_LAST_URL 是空字符串
+    chuanyun_up "$(chuanyun_slug)-web" "$WEB_PORT"
+    WEB_URL="$CHUANYUN_LAST_URL"
+}
+
+project_dev_stop() {
+    # pnpm/nuxt 是多层包装，必须杀进程树
+    [ -n "$WEB_PID" ] && kill_tree "$WEB_PID" && echo -e "${GREEN}网站已停止${NC}"
+    return 0
+}
+
+project_dev_info() {
+    echo -e "  网站:    ${CYAN}http://localhost:${WEB_PORT}${NC}"
+    [ -n "$WEB_URL" ] && echo -e "  网站公网: ${CYAN}${WEB_URL}${NC}"
+    return 0
+}
+```
+
+`./dev.sh` 的输出就会多出两行：
+
+```
+  网站:    http://localhost:3000
+  网站公网: https://<用户>-<项目>-web.<域名>
+```
+
+可直接用的助手：
+
+| 助手 | 作用 |
+|---|---|
+| `resolve_port <端口> <名称>` | 解析端口，结果在 `RESOLVED_PORT`。**别写死端口**，否则同机多项目互抢 |
+| `chuanyun_up <名字> <端口>` | 建公网隧道，地址在 `CHUANYUN_LAST_URL`；退出时 dev.sh 统一注销 |
+| `chuanyun_slug` | 项目标识（`.deploy.env` 的 `PROJECT_NAME`，没有则仓库目录名） |
+| `kill_tree <PID>` | 结束进程树，`project_dev_stop` 里用 |
+| `ROOT_DIR` / `SERVER_PORT` | 仓库根 / 已解析的后端端口 |
+
+> **注意 dev server 的 Host 校验**：Vite 系（含 Nuxt 的 vite 层）会拒绝陌生 Host，
+> 经隧道访问报 `Blocked request`。后台 admin 由 `vite-plugin-chuanyun` 自动处理，
+> 自己加的服务需要把隧道域名加进该框架的 `allowedHosts`。
+
+### 部署：`deploy.project.sh`
+
+```bash
+#!/bin/bash
+# deploy.project.sh —— 被 ./deploy.sh 自动 source
+PROJECT_DEPLOY_TARGETS="web"
+
+project_deploy_web() {
+    echo -e "${YELLOW}[网站] 打包构建...${NC}"
+    cd "$ROOT_DIR/web" && pnpm install && pnpm build
+
+    check_remote_owner "$REMOTE_WEB_DIR" "网站"
+    ssh_run "mkdir -p ${REMOTE_WEB_DIR}"
+    scp_to "..." "${REMOTE_WEB_DIR}/..."
+    mark_remote_owner "$REMOTE_WEB_DIR"
+}
+```
+
+之后 `./deploy.sh web` 单独发布，`./deploy.sh all` 会在 server/admin 之后一并执行；
+`make release-web` 同样可用。所需变量（如 `REMOTE_WEB_DIR`）加进 `.deploy.env` 即可。
+
 ## 基底与下游项目
 
 本仓库是统一基底：`https://github.com/xsxs89757/base`。新项目从基底克隆派生，
