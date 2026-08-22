@@ -388,9 +388,14 @@ chuanyun_slug() {
 }
 
 # 注销指定隧道，失败无所谓
+# 退出时把隧道**关掉**，不是删掉。DELETE 会把这条隧道连同用户在穿云客户端里给它设的
+# 访问口令一起删掉——下次 ./dev.sh 回来的就是一条没门的隧道，而且没人提醒。
+# 关掉之后它留在客户端列表里（开关是关的、口令还在），下次注册时原地打开。
+# 真想彻底删，在客户端里删。
 chuanyun_forget() {
     [ -z "$1" ] && return 0
-    curl -sf -m 3 -X DELETE "http://127.0.0.1:${CHUANYUN_API_PORT}/api/tunnels/$1" >/dev/null 2>&1 || true
+    curl -sf -m 3 -X PATCH "http://127.0.0.1:${CHUANYUN_API_PORT}/api/tunnels/$1" \
+        -H 'Content-Type: application/json' -d '{"enabled":false}' >/dev/null 2>&1 || true
     return 0
 }
 
@@ -418,9 +423,10 @@ chuanyun_up() {
     # 穿云没在跑就安静退出
     curl -sf -m 2 "$base/api/status" >/dev/null 2>&1 || return 0
 
-    # 先注销同名隧道再注册：dev.sh 会自动换端口，上次残留的隧道可能指向旧端口；
-    # 且穿云对已存在的名字会直接报"名称已被占用"而不是改端口
-    chuanyun_forget "$name"
+    # 不要先注销再注册。DELETE 会把穿云里这条隧道连同用户在客户端设的访问口令
+    # 一起删掉，再 POST 回来就是一条没口令的隧道——门被启动脚本静默拆了。
+    # 穿云 0.1.11 起同名重注册是幂等的：端口没变直接成功，端口变了（自动避让）
+    # 会关掉重开指向新端口，口令原样保留。
     # 地址直接取注册响应里的 url。不能按端口 resolve——同一端口可能挂着多条隧道
     # （比如手工建过一条，或 chuanyun.toml 里声明了同端口的另一个名字），那样会取错别人的地址
     resp=$(curl -sf -m 5 -X POST "$base/api/tunnels" -H 'Content-Type: application/json' \
@@ -564,10 +570,9 @@ export SERVER_PORT
 # air 之后 fork 的后端进程才拿得到（业务代码可用它拼微信/支付回调地址）
 if [ "$CHUANYUN_ENABLED" = "1" ]; then
     CHUANYUN_WEB_TUNNEL="$(chuanyun_slug)-admin"
-    # 先清掉上次残留的前端隧道：插件是直接 POST 注册的，撞上同名会报"名称已被占用"，
-    # 结果公网地址仍指向上一次那个已经关掉的端口
-    chuanyun_forget "$CHUANYUN_WEB_TUNNEL"
-    chuanyun_track "$CHUANYUN_WEB_TUNNEL"           # 插件建的隧道也由 dev.sh 负责注销
+    # 这里不再先 DELETE 上次的前端隧道：DELETE 会把用户在客户端给它设的访问口令
+    # 一起删掉。穿云 0.1.11 起插件的 POST 是幂等的，端口变了会自动挪过去、口令保留。
+    chuanyun_track "$CHUANYUN_WEB_TUNNEL"           # 插件建的隧道也由 dev.sh 负责关掉
     chuanyun_up "$(chuanyun_slug)-api" "$SERVER_PORT"
     CHUANYUN_PUBLIC_URL="$CHUANYUN_LAST_URL"
     chuanyun_tunnels_up

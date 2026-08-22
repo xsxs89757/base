@@ -66,7 +66,7 @@ git push -u origin main
 
 1. **本地开发**：仓库根新增 `dev.project.sh`，实现三个函数。dev.sh 会 source 它并在合适时机调用，其中这些助手可以直接用：
    - `resolve_port <端口> <名称>`：解析端口，结果在 `RESOLVED_PORT`（自动处理占用、`--force`、与本次已分配端口去重）。**必须用它**，不要自己写死端口，否则同机多项目会互相抢。
-   - `chuanyun_up <隧道名> <端口>`：建公网隧道，地址在 `CHUANYUN_LAST_URL`（穿云没开就是空字符串）。隧道名用 `$(chuanyun_slug)-xxx` 保证按项目区分；dev.sh 退出时统一注销，无需自己清理。
+   - `chuanyun_up <隧道名> <端口>`：建公网隧道，地址在 `CHUANYUN_LAST_URL`（穿云没开就是空字符串）。隧道名用 `$(chuanyun_slug)-xxx` 保证按项目区分；dev.sh 退出时统一关掉（不删，用户设的口令保留），无需自己清理。
    - `kill_tree <PID>`：在 `project_dev_stop` 里结束自己启动的进程树（pnpm/nuxt 都是多层包装，`kill` 单个 PID 杀不干净）。
    - 现成变量：`ROOT_DIR`、`SERVER_PORT`（已解析）、`RED/GREEN/YELLOW/CYAN/NC` 配色。
 2. **部署**：仓库根新增 `deploy.project.sh`，声明 `PROJECT_DEPLOY_TARGETS="web"` 并实现 `project_deploy_web`，可复用 `ssh_run` / `scp_to` / `check_remote_owner` / `ensure_systemd_unit` / `restart_remote_service`。
