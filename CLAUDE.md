@@ -75,6 +75,8 @@ git push -u origin main
 
 完整可抄的 `dev.project.sh` 示例见 README「新增额外服务」一节。
 
+**穿云隧道的两种写法别混用**：端口由 dev.sh 动态解析的服务（后端、admin、`dev.project.sh` 里启动的），一律在脚本里用 `chuanyun_up` 现取现用；只有 dev.sh **不启动**的固定端口服务才写进 `chuanyun.toml` 的 `[[tunnels]]`（该文件里的 port 按原样使用，不做端口避让）。`[[connects]]` 用来把同事已开的隧道接到本机端口，`local_port` 同样按原样占用；dev.sh 会在解析自身端口之前先建立 connect，因此后续端口分配会自动避开它。隧道名一律带 `project` 前缀——公网地址不含项目信息，不加前缀跨项目必撞名。
+
 同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：下游没改过的基底文件取基底版本；下游改过的文件（脚本/文档/业务代码）人工合并——保留下游定制、吸收基底修复；拿不准某文件归属时用 `git log base/main -- <文件>` 查它是否来自基底。
 
 ## 工作原则
@@ -234,6 +236,7 @@ bash -n dev.sh && bash -n deploy.sh
 ./dev.sh --force  # 杀死占用进程、坚持用配置端口，等价 make dev-force
 # Windows 在 Git Bash 中运行：脚本自动改用 server/.air.windows.toml / netstat / taskkill
 # 装了穿云客户端时自动给前后端各建一条公网隧道（没装/没开则静默跳过）；
+# 仓库根有 chuanyun.toml 时额外应用其 [[tunnels]]/[[connects]]（见 chuanyun.toml.example）；
 # 关闭用 ./dev.sh --no-chuanyun。后端可读 CHUANYUN_PUBLIC_URL 拼回调地址
 
 # 后端开发

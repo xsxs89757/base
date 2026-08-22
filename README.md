@@ -68,6 +68,35 @@ make dev-force
 - 后端进程可读环境变量 `CHUANYUN_PUBLIC_URL` 拼回调地址（未接入时为空，业务代码自行回落本地）；
 - 本次不想用：`./dev.sh --no-chuanyun`（等价 `CHUANYUN=0 ./dev.sh`）。
 
+#### 用 `chuanyun.toml` 声明额外隧道 / 接入同事的服务
+
+后端和 admin 前端不用配，dev.sh 已经自动处理。需要**多暴露一个固定端口**，或者
+**把同事的服务接到本机**时，复制模板即可（`cp chuanyun.toml.example chuanyun.toml`）：
+
+```toml
+project = "base"          # 隧道名前缀，决定公网地址
+
+[[tunnels]]               # 我暴露的：dev.sh 不启动的服务（手工进程 / docker）
+name = "docs"             # → {用户}-base-docs.{域名}
+port = 9000               # 按原样使用，不做端口避让
+
+[[connects]]              # 我接入的：后端用同事的
+local_port = 8082
+from = "zhangsan-api"     # 同事的隧道子域名，也可写完整 URL
+auth = "user:pass"        # 对方设了访问口令才需要
+```
+
+`./dev.sh` 启动时自动应用，退出时自动注销；手工建的隧道不会被动到。
+
+**为什么必须有 `project` 前缀**：公网地址的构成是 `{用户}-{name}.{域名}`，
+里面**不含项目信息**——两个项目都写 `name = "api"`，同一个人名下就会撞名，
+后启动的那个会被拒绝。加上 project 前缀（`base-api` / `crm-api`）才互不干扰。
+不写 `project` 时回落到 `.deploy.env` 的 `PROJECT_NAME`，再没有就用仓库目录名。
+
+**`[[tunnels]]` 别写后端/前端的端口**：dev.sh 在端口被占时会自动改用空闲端口，
+而 toml 里是写死的，两者会不一致。dev.sh 自己启动的服务一律由它动态建隧道；
+`dev.project.sh` 里的服务用 `chuanyun_up` 现取现用（见「新增额外服务」）。
+
 **Windows 用户**：在 **Git Bash** 中运行 `./dev.sh`（随 Git for Windows 附带，勿用
 PowerShell/cmd）。脚本会自动切换到 Windows 实现——air 改用 `server/.air.windows.toml`
 （无 Unix 内联环境变量前缀、产物带 `.exe`）、端口探测改用 `netstat`、结束进程改用

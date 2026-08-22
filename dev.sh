@@ -32,6 +32,10 @@ EXE=""
 CHUANYUN_API_PORT="${CHUANYUN_API_PORT:-7075}"
 CHUANYUN_ENABLED=1
 [ "${CHUANYUN:-}" = "0" ] && CHUANYUN_ENABLED=0
+CHUANYUN_TOML="$ROOT_DIR/chuanyun.toml"   # 可选的项目级隧道配置，见 chuanyun.toml.example
+CHUANYUN_PROJECT=""      # chuanyun.toml 里的 project，用作隧道名前缀
+CHUANYUN_CONNECT_PORTS="" # 已建立的 connect 本地端口，退出时断开
+CHUANYUN_EXTRA_INFO=""   # chuanyun.toml 带来的额外地址，汇总时打印
 CHUANYUN_TUNNELS=""      # 本次登记的所有隧道名，退出时逐个注销（含 dev.project.sh 建的）
 CHUANYUN_PUBLIC_URL=""   # 后端公网地址，export 给后端进程拼回调用
 CHUANYUN_LAST_URL=""     # 最近一次 chuanyun_up 拿到的地址，供调用方取用
@@ -283,10 +287,59 @@ kill_tree() {
     return 0
 }
 
-# 项目标识：优先 .deploy.env 的 PROJECT_NAME（base 里项目身份的正源），其次仓库目录名。
+# 解析 chuanyun.toml 的受限子集，输出制表符分隔的记录：
+#   project <名字>
+#   tunnel  <name> <port>
+#   connect <local_port> <from> <auth>
+# 只认 `key = value` 和 `[[section]]`。不用 python/toml 库：Windows Git Bash 未必有 python3，
+# 而这个子集用 awk 足够解析
+chuanyun_toml_records() {
+    [ -f "$CHUANYUN_TOML" ] || return 0
+    awk '
+        function emit() {
+            if (sec == "tunnel" && name != "" && port != "")
+                printf "tunnel\t%s\t%s\n", name, port
+            else if (sec == "connect" && lport != "" && from != "")
+                printf "connect\t%s\t%s\t%s\n", lport, from, auth
+            name = ""; port = ""; lport = ""; from = ""; auth = ""
+        }
+        {
+            # 去掉行内注释，引号里的 # 不算
+            line = ""; inq = 0
+            for (i = 1; i <= length($0); i++) {
+                c = substr($0, i, 1)
+                if (c == "\"") inq = !inq
+                if (c == "#" && !inq) break
+                line = line c
+            }
+            $0 = line
+        }
+        /^[ \t]*$/ { next }
+        /^[ \t]*\[\[[ \t]*tunnels[ \t]*\]\]/  { emit(); sec = "tunnel";  next }
+        /^[ \t]*\[\[[ \t]*connects[ \t]*\]\]/ { emit(); sec = "connect"; next }
+        /^[ \t]*\[/ { emit(); sec = ""; next }
+        /=/ {
+            eq = index($0, "=")
+            key = substr($0, 1, eq - 1); val = substr($0, eq + 1)
+            gsub(/^[ \t]+|[ \t]+$/, "", key)
+            gsub(/^[ \t]+|[ \t]+$/, "", val)
+            gsub(/^"|"$/, "", val)
+            if (sec == "") { if (key == "project") printf "project\t%s\n", val }
+            else if (key == "name")       name  = val
+            else if (key == "port")       port  = val
+            else if (key == "local_port") lport = val
+            else if (key == "from")       from  = val
+            else if (key == "auth")       auth  = val
+        }
+        END { emit() }
+    ' "$CHUANYUN_TOML"
+}
+
+# 项目标识：优先 chuanyun.toml 的 project，其次 .deploy.env 的 PROJECT_NAME，最后仓库目录名。
 # 不 source .deploy.env——那会把 SSH_PASS 等一并带进环境
 chuanyun_slug() {
-    local slug=""
+    local slug="$CHUANYUN_PROJECT"
+    [ -n "$slug" ] && { echo "$slug"; return 0; }
     if [ -f "$ROOT_DIR/.deploy.env" ]; then
         slug=$(grep -E '^[[:space:]]*PROJECT_NAME=' "$ROOT_DIR/.deploy.env" 2>/dev/null \
             | head -1 | cut -d= -f2- | tr -d '"'"'"'[:space:]' || true)
@@ -316,7 +369,7 @@ chuanyun_track() {
 #     chuanyun_up "$(chuanyun_slug)-web" "$WEB_PORT"; WEB_URL="$CHUANYUN_LAST_URL"
 # 任何一步失败都只是没有公网地址，不影响本地开发
 chuanyun_up() {
-    local name="$1" port="$2" url base="http://127.0.0.1:${CHUANYUN_API_PORT}"
+    local name="$1" port="$2" url resp base="http://127.0.0.1:${CHUANYUN_API_PORT}"
     CHUANYUN_LAST_URL=""
 
     # --no-chuanyun / CHUANYUN=0 时一律不建隧道。守卫放在这里而不是调用处，
@@ -329,10 +382,14 @@ chuanyun_up() {
     # 先注销同名隧道再注册：dev.sh 会自动换端口，上次残留的隧道可能指向旧端口；
     # 且穿云对已存在的名字会直接报"名称已被占用"而不是改端口
     chuanyun_forget "$name"
-    curl -sf -m 5 -X POST "$base/api/tunnels" -H 'Content-Type: application/json' \
-        -d "[{\"port\":${port},\"name\":\"${name}\"}]" >/dev/null 2>&1 || true
+    # 地址直接取注册响应里的 url。不能按端口 resolve——同一端口可能挂着多条隧道
+    # （比如手工建过一条，或 chuanyun.toml 里声明了同端口的另一个名字），那样会取错别人的地址
+    resp=$(curl -sf -m 5 -X POST "$base/api/tunnels" -H 'Content-Type: application/json' \
+        -d "[{\"port\":${port},\"name\":\"${name}\"}]" 2>/dev/null || true)
+    url=$(printf '%s' "$resp" | sed -n 's/.*"url":"\([^"]*\)".*/\1/p' | head -1)
 
-    url=$(curl -sf -m 3 "$base/api/resolve?port=${port}&plain=1" 2>/dev/null || true)
+    # 注册没拿到 url（响应异常等）时退回按端口问一次
+    [ -z "$url" ] && url=$(curl -sf -m 3 "$base/api/resolve?port=${port}&plain=1" 2>/dev/null || true)
     # 没有隧道时 resolve 会回落成 127.0.0.1，那不算接入成功
     case "$url" in
         http*://127.0.0.1*|http*://localhost*|"") return 0 ;;
@@ -341,12 +398,62 @@ chuanyun_up() {
     return 0
 }
 
+# 建立 chuanyun.toml 声明的 [[connects]]：把同事的服务接到本机端口上。
+# 早于端口解析执行——connect 会真占住本地端口，后面 resolve_port 自然会避开它
+chuanyun_connects_up() {
+    local kind lport from auth res body
+    [ "$CHUANYUN_ENABLED" = "1" ] || return 0
+    [ -f "$CHUANYUN_TOML" ] || return 0
+    curl -sf -m 2 "http://127.0.0.1:${CHUANYUN_API_PORT}/api/status" >/dev/null 2>&1 || return 0
+
+    while IFS="$(printf '\t')" read -r kind lport from auth; do
+        [ "$kind" = "connect" ] || continue
+        body="{\"local_port\":${lport},\"from\":\"${from}\""
+        [ -n "$auth" ] && body="${body},\"auth\":\"${auth}\""
+        body="${body}}"
+        res=$(curl -sf -m 8 -X POST "http://127.0.0.1:${CHUANYUN_API_PORT}/api/connects" \
+              -H 'Content-Type: application/json' -d "$body" 2>/dev/null || true)
+        case "$res" in
+            *'"ok":true'*)
+                CHUANYUN_CONNECT_PORTS="$CHUANYUN_CONNECT_PORTS $lport"
+                echo -e "${GREEN}[穿云] 已接入 ${from} -> 本地 ${lport}${NC}"
+                ;;
+            *)
+                # 接不上不该拦住开发：本地端口被占、同事没开隧道、口令不对都归到这里
+                echo -e "${YELLOW}[穿云] 接入 ${from} 失败，跳过: ${res:-无响应}${NC}"
+                ;;
+        esac
+    done < <(chuanyun_toml_records)
+    return 0
+}
+
+# 建立 chuanyun.toml 声明的 [[tunnels]]。这里的 port 按原样使用（不经 resolve_port）：
+# 声明的语义是"把已经跑在这个端口上的东西暴露出去"，换成别的空闲端口就指向空气了。
+# dev.sh 自己启动的服务端口是动态的，那些用 chuanyun_up 现取现用，别写进 toml
+chuanyun_tunnels_up() {
+    local kind name port
+    [ "$CHUANYUN_ENABLED" = "1" ] || return 0
+    [ -f "$CHUANYUN_TOML" ] || return 0
+
+    while IFS="$(printf '\t')" read -r kind name port; do
+        [ "$kind" = "tunnel" ] || continue
+        chuanyun_up "$(chuanyun_slug)-${name}" "$port"
+        if [ -n "$CHUANYUN_LAST_URL" ]; then
+            CHUANYUN_EXTRA_INFO="${CHUANYUN_EXTRA_INFO}  ${name}(:${port}): ${CHUANYUN_LAST_URL}\n"
+        fi
+    done < <(chuanyun_toml_records)
+    return 0
+}
+
 chuanyun_down() {
-    local t
+    local t p
     # 含前端隧道：那条虽是 vite 插件建的，但插件的退出钩子在被 kill 树杀时来不及跑，
     # 名字又是 dev.sh 注入的，这里一并收尾
     for t in $CHUANYUN_TUNNELS; do
         chuanyun_forget "$t"
+    done
+    for p in $CHUANYUN_CONNECT_PORTS; do
+        curl -sf -m 3 -X DELETE "http://127.0.0.1:${CHUANYUN_API_PORT}/api/connects/$p" >/dev/null 2>&1 || true
     done
     return 0
 }
@@ -398,6 +505,13 @@ echo -e "${CYAN}   Admin 后台管理系统 - DEV   ${NC}"
 echo -e "${CYAN}==============================${NC}"
 echo ""
 
+# chuanyun.toml：先读出 project（隧道名前缀要用），再建 connects。
+# connects 会占住本地端口，所以必须早于 resolve_port，后面才会自动避开
+if [ "$CHUANYUN_ENABLED" = "1" ] && [ -f "$CHUANYUN_TOML" ]; then
+    CHUANYUN_PROJECT=$(chuanyun_toml_records | awk -F"$(printf '\t')" '$1 == "project" { print $2; exit }')
+    chuanyun_connects_up
+fi
+
 resolve_port "$SERVER_PORT" "后端"
 SERVER_PORT="$RESOLVED_PORT"
 resolve_port "$ADMIN_PORT" "前端"
@@ -417,6 +531,7 @@ if [ "$CHUANYUN_ENABLED" = "1" ]; then
     chuanyun_track "$CHUANYUN_WEB_TUNNEL"           # 插件建的隧道也由 dev.sh 负责注销
     chuanyun_up "$(chuanyun_slug)-api" "$SERVER_PORT"
     CHUANYUN_PUBLIC_URL="$CHUANYUN_LAST_URL"
+    chuanyun_tunnels_up
     export CHUANYUN_NAME="$CHUANYUN_WEB_TUNNEL"     # 前端隧道名，vite 插件读它
 else
     export CHUANYUN=0                                # 让 vite 插件一并跳过
@@ -519,6 +634,9 @@ echo -e "  后端:    ${CYAN}http://localhost:${SERVER_PORT}${NC}"
 echo -e "  Swagger: ${CYAN}http://localhost:${SERVER_PORT}/swagger/index.html${NC}"
 if [ -n "$CHUANYUN_PUBLIC_URL" ]; then
 echo -e "  公网:    ${CYAN}${CHUANYUN_PUBLIC_URL}${NC} (穿云 -> 后端 ${SERVER_PORT})"
+fi
+if [ -n "$CHUANYUN_EXTRA_INFO" ]; then
+printf "%b" "${CYAN}${CHUANYUN_EXTRA_INFO}${NC}"
 fi
 if type project_dev_info &>/dev/null; then
     project_dev_info
