@@ -33,6 +33,7 @@ CHUANYUN_API_PORT="${CHUANYUN_API_PORT:-7075}"
 CHUANYUN_ENABLED=1
 [ "${CHUANYUN:-}" = "0" ] && CHUANYUN_ENABLED=0
 CHUANYUN_TOML="$ROOT_DIR/chuanyun.toml"   # 可选的项目级隧道配置，见 chuanyun.toml.example
+CHUANYUN_LOCAL="$ROOT_DIR/chuanyun.local.toml"   # 个人的：接同事隧道要的口令，不进 git
 CHUANYUN_PROJECT=""      # chuanyun.toml 里的 project，用作隧道名前缀
 CHUANYUN_CONNECT_PORTS="" # 已建立的 connect 本地端口，退出时断开
 CHUANYUN_EXTRA_INFO=""   # chuanyun.toml 带来的额外地址，汇总时打印
@@ -291,16 +292,36 @@ kill_tree() {
 #   project <名字>
 #   tunnel  <name> <port>
 #   connect <local_port> <from> <auth>
+# connect 的 auth 从 chuanyun.local.toml（不进 git）里按 from 匹配补上：
+#   [[connects]]
+#   from = "zhangsan-api"
+#   auth = "user:pass"
+# chuanyun.toml 里直接写 auth 也认，但那文件进 git，口令会永远留在历史里。
 # 只认 `key = value` 和 `[[section]]`。不用 python/toml 库：Windows Git Bash 未必有 python3，
 # 而这个子集用 awk 足够解析
 chuanyun_toml_records() {
     [ -f "$CHUANYUN_TOML" ] || return 0
-    awk '
+    # 个人口令文件先由 shell 解析成 "from\tauth" 行，通过 -v 传给 awk 拆进数组，
+    # 免得 awk 里再嵌一层文件读取
+    local local_pairs
+    local_pairs=$(chuanyun_local_auths | tr '\n' '\001')
+    awk -v local_pairs="$local_pairs" '
+        BEGIN {
+            n = split(local_pairs, rows, "\001")
+            for (r = 1; r <= n; r++) {
+                if (rows[r] == "") continue
+                t = index(rows[r], "\t")
+                if (t > 0) local_auth[substr(rows[r], 1, t - 1)] = substr(rows[r], t + 1)
+            }
+        }
         function emit() {
             if (sec == "tunnel" && name != "" && port != "")
                 printf "tunnel\t%s\t%s\n", name, port
-            else if (sec == "connect" && lport != "" && from != "")
+            else if (sec == "connect" && lport != "" && from != "") {
+                # 口令优先取 chuanyun.local.toml 里同一个 from 的
+                if (from in local_auth) auth = local_auth[from]
                 printf "connect\t%s\t%s\t%s\n", lport, from, auth
+            }
             name = ""; port = ""; lport = ""; from = ""; auth = ""
         }
         {
@@ -333,6 +354,24 @@ chuanyun_toml_records() {
         }
         END { emit() }
     ' "$CHUANYUN_TOML"
+}
+
+# chuanyun.local.toml → 每行 "<from>\t<auth>"。个人口令文件，只有 [[connects]] 的 from + auth
+chuanyun_local_auths() {
+    [ -f "$CHUANYUN_LOCAL" ] || return 0
+    awk '
+        function emit() { if (from != "" && auth != "") printf "%s\t%s\n", from, auth; from = ""; auth = "" }
+        { line = ""; inq = 0
+          for (i = 1; i <= length($0); i++) { c = substr($0, i, 1); if (c == "\"") inq = !inq; if (c == "#" && !inq) break; line = line c }
+          $0 = line }
+        /^[ \t]*$/ { next }
+        /^[ \t]*\[\[[ \t]*connects[ \t]*\]\]/ { emit(); next }
+        /^[ \t]*\[/ { emit(); next }
+        /=/ { eq = index($0, "="); key = substr($0, 1, eq - 1); val = substr($0, eq + 1)
+              gsub(/^[ \t]+|[ \t]+$/, "", key); gsub(/^[ \t]+|[ \t]+$/, "", val); gsub(/^"|"$/, "", val)
+              if (key == "from") from = val; else if (key == "auth") auth = val }
+        END { emit() }
+    ' "$CHUANYUN_LOCAL"
 }
 
 # 项目标识：优先 chuanyun.toml 的 project，其次 .deploy.env 的 PROJECT_NAME，最后仓库目录名。

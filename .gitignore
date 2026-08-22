@@ -78,3 +78,6 @@ vite.config.mjs.*
 vite.config.js.*
 vite.config.ts.*
 .deploy.env
+
+# 穿云：个人口令文件（接同事隧道用），每人自己一份
+chuanyun.local.toml
