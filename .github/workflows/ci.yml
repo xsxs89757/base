@@ -1,0 +1,97 @@
+name: ci
+
+# 下游项目 merge 基底后会继承这份 workflow：backend / frontend 两个 job 对下游同样有用，
+# hooks-guard 只在基底仓库本体运行（下游可以自由修改挂载点，那是它们存在的意义）。
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  hooks-guard:
+    name: 挂载点冻结校验
+    if: github.repository == 'xsxs89757/base'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - run: bash scripts/check-hooks.sh
+
+  backend:
+    name: 后端
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      # bash -n 一次只检查第一个文件，必须逐个来
+      - name: 脚本语法
+        run: |
+          for f in dev.sh deploy.sh scripts/check-hooks.sh; do
+            bash -n "$f"
+          done
+
+      - name: vet & test
+        working-directory: server
+        run: go vet ./... && go test ./...
+
+      # deploy.sh 用 CGO_ENABLED=0 交叉编译，这里保证纯 Go 依赖没被破坏
+      - name: 交叉编译
+        working-directory: server
+        run: CGO_ENABLED=0 go build -o /dev/null .
+
+      - name: 脚手架 vet & test
+        working-directory: tools/create-base
+        run: go vet ./... && go test ./...
+
+      # docs/ 随仓库提交（main.go import 了 base/docs），必须与代码同步；
+      # swag 版本与 Makefile 钉死同一个，否则不同版本的生成物差异会造成误报
+      - name: Swagger 文档时效
+        run: |
+          (cd server && go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependency --parseInternal)
+          git diff --exit-code -- server/docs || {
+            echo "::error::server/docs 已过期，请本地执行 make swagger 后提交生成物"
+            exit 1
+          }
+
+  frontend:
+    name: 前端
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: admin/package.json
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: admin/.node-version
+          cache: pnpm
+          cache-dependency-path: admin/pnpm-lock.yaml
+
+      # admin/.npmrc 把 registry 指向 npmmirror（国内开发快），CI 在境外走官方源更稳
+      - name: 安装依赖
+        working-directory: admin
+        run: pnpm install --frozen-lockfile --registry https://registry.npmjs.org
+
+      - name: 类型检查
+        working-directory: admin
+        run: pnpm -F @vben/web-antd typecheck
+
+      - name: 构建
+        working-directory: admin
+        run: pnpm build:antd

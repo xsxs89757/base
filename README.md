@@ -25,10 +25,21 @@
 - Node.js 22+
 - pnpm 10+
 
+### 创建新项目
+
+```bash
+go run github.com/xsxs89757/base/tools/create-base@latest myproject
+```
+
+一条命令完成：保留共同 git 历史地克隆基底（之后才能 `make sync-base`）、生成随机
+`jwt.secret`、按项目名填好 `.deploy.env` 与前端 `.env`、安装依赖、提交首个 commit。
+常用参数：`--origin <仓库地址>`、`--title <前端标题>`、`--version main`、`--skip-install`。
+手工创建方式见「基底与下游项目」。
+
 ### 一键启动（开发）
 
 ```bash
-# 首次使用需复制配置文件
+# 脚手架创建的项目已生成 server/config.yaml；手工克隆的需要先复制一份
 cp server/config.yaml.example server/config.yaml
 
 # 启动 (后端 air 热更新 + 前端 Vite HMR)
@@ -149,9 +160,14 @@ pnpm dev:antd
 
 ```
 ├── Makefile                     # 快捷命令入口
+├── CHANGELOG.md                 # 版本记录与升级步骤
+├── .base-version                # 当前基底版本 (由基底发布流程写入，下游勿改)
 ├── dev.sh                       # 一键开发启动 (air 热更新)
 ├── deploy.sh                    # 一键部署脚本
 ├── .deploy.env.example          # 部署配置模板
+├── .github/workflows/ci.yml     # CI: 挂载点校验 / 后端测试 / 前端构建
+├── scripts/check-hooks.sh       # 校验基底未改动下游挂载点
+├── tools/create-base/           # 新项目脚手架 (独立 Go module)
 │
 ├── server/                      # Go 后端
 │   ├── main.go                  # 入口文件
@@ -356,16 +372,26 @@ project_deploy_web() {
 之后随时 `make sync-base` 合入基底的 bug 修复和新功能。
 
 ```bash
-# 创建新项目（必须保留共同 git 历史，禁止删 .git 重新 init / 纯文件拷贝）
-git clone https://github.com/xsxs89757/base.git myproject
+# 创建新项目：推荐用脚手架，它会做完下面所有事情
+go run github.com/xsxs89757/base/tools/create-base@latest myproject --origin <新项目仓库地址>
+
+# 手工方式（等价，必须保留共同 git 历史，禁止删 .git 重新 init / 纯文件拷贝）
+git clone --no-tags -o base https://github.com/xsxs89757/base.git myproject
 cd myproject
-git remote rename origin base
 git remote add origin <新项目仓库地址>
+git branch --unset-upstream        # 否则 git push 会推向基底
 git push -u origin main
 
 # 之后同步基底更新
-make sync-base   # 等价 git fetch base && git merge base/main
+make sync-base                     # 默认合入基底最新版本标签
+make sync-base VERSION=v1.2.0      # 合入指定版本
+make sync-base VERSION=main        # 合入开发中的 main
+make base-version                  # 查看当前已合入版本与远端最新版本
 ```
+
+`--no-tags` 不能省：基底的 `v*` 标签直接拉进来会和下游自己的版本号撞车。
+`make sync-base` 会把基底标签拉到 `base/v*` 命名空间，与下游标签隔离；
+下游用 `git describe` 时记得加 `--match 'v*'` 排除掉它们。
 
 下游开发约定（按 sync-base 合并成本分两类）：
 
@@ -451,15 +477,27 @@ middleware.RegisterRoutePermissions(
 
 只需登录、不校验权限码的路由用 `middleware.RegisterAuthenticatedRoutes`。`middleware.CasbinAuth()` 是 `PermissionAuth()` 的旧名，仍可使用。
 
-## 升级说明（2026-09 鉴权加固）
+## 版本与发布
 
-从更早的基底同步到本版本后：
+基底按语义化版本发布，每个版本的改动和升级步骤记在 [CHANGELOG.md](CHANGELOG.md)。
+`.base-version` 记录当前代码来自哪个基底版本（由基底发布流程写入，下游不要手改）。
 
-- token 增加了类型标记，所有已登录用户需要重新登录一次；
-- Casbin 已移除，旧库里的 `casbin_rule` 表不再使用，可手动 `DROP TABLE casbin_rule`；
-- 角色/用户/配置改为物理删除，启动时自动清掉历史软删除行，此前"删过就建不了同名"的问题消失；
-- 演示菜单 Analytics / About 会在启动时自动移除，首页改为 `/workspace` 工作台；
-- `mode: production` 现在真的生效：`jwt.secret` 必须至少 32 位且不能是示例占位值，否则拒绝启动；生产库只创建 `super` 账号，且每次启动会检查它是否还在用默认密码。
+版本号含义：
+
+- **MAJOR**：同步后需要 merge + `go mod tidy` 之外的人工迁移（删配置键、改挂载点签名、Vben 大版本）；
+- **MINOR**：新功能、新增可选配置或菜单，可能需要用户重新登录；
+- **PATCH**：修 bug、改文档。
+
+基底维护者发布新版本（下游用不到）：
+
+```bash
+# 1. 先把内容提交推到 main，等 CI 通过
+# 2. 在 CHANGELOG.md 写好 ## [1.1.0] - YYYY-MM-DD 条目
+make base-release VERSION=v1.1.0
+```
+
+`base-release` 会先跑 `make base-check`（挂载点冻结校验、后端测试、交叉编译、脚本语法、
+Swagger 文档时效），再写 `.base-version`、打标签、原子推送。
 
 ## 切换数据库
 

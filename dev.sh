@@ -611,32 +611,25 @@ fi
 # 这类真该处理的警告冲得看不见。这里只滤掉流水账——不用 swag 自己的 -q，那个把
 # 警告和报错也一并吞了。
 SWAG_NOISE='Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at '
-SWAG_BIN="$GOPATH_DIR/bin/swag$EXE"
-# docs 缺失（如被误删）且 swag 未装时必须现装现生成，否则 main.go 的 base/docs import 编译不过
-if [ ! -f "$SWAG_BIN" ] && [ ! -f docs/docs.go ]; then
-    echo -e "${YELLOW}      docs/ 缺失且 swag 未安装，安装 swag (Go Swagger 生成工具)...${NC}"
-    go install github.com/swaggo/swag/cmd/swag@latest
-fi
-if [ -f "$SWAG_BIN" ]; then
-    echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
-    SWAG_LOG=$(mktemp)
-    if "$SWAG_BIN" init -g main.go -o docs --parseDependency >"$SWAG_LOG" 2>&1; then
-        grep -vE "$SWAG_NOISE" "$SWAG_LOG" | sed 's/^/      /' || true
-        echo -e "${GREEN}      Swagger 文档已生成${NC}"
-    else
-        # 失败时不过滤：报错往往就藏在被滤掉的那类行的上下文里
-        echo -e "${YELLOW}      Swagger 生成失败（不影响启动，继续用仓库内已有 docs）:${NC}"
-        tail -20 "$SWAG_LOG" | sed 's/^/      /'
-        # swag 中途失败可能把 docs/ 写坏（docs.go 缺失会让 go build 编译不过、air 起不来），从 git 恢复
-        if [ ! -f docs/docs.go ]; then
-            echo -e "${YELLOW}      docs/docs.go 缺失，从 git 恢复 docs/ ...${NC}"
-            git checkout -- docs 2>/dev/null || true
-        fi
-    fi
-    rm -f "$SWAG_LOG"
+# swag 版本与 Makefile、CI 保持一致：不同版本的生成物有差异，CI 的 docs 时效检查会误报。
+# 用 go run 而不是 go install，省掉"装没装、装的哪个版本"的分歧（首次编译后有缓存）。
+SWAG_CMD=(go run github.com/swaggo/swag/cmd/swag@v1.16.6)
+echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
+SWAG_LOG=$(mktemp)
+if "${SWAG_CMD[@]}" init -g main.go -o docs --parseDependency --parseInternal >"$SWAG_LOG" 2>&1; then
+    grep -vE "$SWAG_NOISE" "$SWAG_LOG" | sed 's/^/      /' || true
+    echo -e "${GREEN}      Swagger 文档已生成${NC}"
 else
-    echo -e "${YELLOW}      swag 未安装，跳过文档生成 (go install github.com/swaggo/swag/cmd/swag@latest)${NC}"
+    # 失败时不过滤：报错往往就藏在被滤掉的那类行的上下文里
+    echo -e "${YELLOW}      Swagger 生成失败（不影响启动，继续用仓库内已有 docs）:${NC}"
+    tail -20 "$SWAG_LOG" | sed 's/^/      /'
+    # swag 中途失败可能把 docs/ 写坏（docs.go 缺失会让 go build 编译不过、air 起不来），从 git 恢复
+    if [ ! -f docs/docs.go ]; then
+        echo -e "${YELLOW}      docs/docs.go 缺失，从 git 恢复 docs/ ...${NC}"
+        git checkout -- docs 2>/dev/null || true
+    fi
 fi
+rm -f "$SWAG_LOG"
 
 # Windows 用专用配置：.air.toml 的 build cmd 带 Unix 内联环境变量前缀(CGO_LDFLAGS=-w)，
 # PowerShell/cmd 不支持该语法，且产物需要 .exe 后缀

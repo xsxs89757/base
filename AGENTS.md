@@ -21,17 +21,25 @@
 
 ### 新项目初始化（下游 bootstrap）
 
-用户新开项目并指定使用本基底时，按以下方式创建。禁止「删 `.git` 重新 init」或纯文件拷贝——那会切断与基底的共同历史，之后无法正常 merge：
+用户新开项目并指定使用本基底时，**优先用脚手架**，它会完成克隆、配置生成、依赖安装和首个提交：
 
 ```bash
-git clone https://github.com/xsxs89757/base.git <项目名>
+go run github.com/xsxs89757/base/tools/create-base@latest <项目名> --origin <新项目仓库地址>
+```
+
+脚手架不可用时手工创建（等价）。禁止「删 `.git` 重新 init」或纯文件拷贝——那会切断与基底的共同历史，之后无法正常 merge：
+
+```bash
+git clone --no-tags -o base https://github.com/xsxs89757/base.git <项目名>
 cd <项目名>
-git remote rename origin base
 git remote add origin <新项目自己的仓库地址>   # 用户未提供则先跳过
+git branch --unset-upstream                    # 否则 git push 推向基底
 git push -u origin main
 ```
 
-初始化后按项目补本地配置（已 gitignore，不会与基底冲突）：复制 `server/config.yaml.example` 为 `server/config.yaml`；部署前创建 `.deploy.env`（`PROJECT_NAME` 必填）。
+`--no-tags` 不能省：基底的 `v*` 标签会和下游自己的版本号撞车（`make sync-base` 会把它们拉到 `base/v*` 命名空间）。
+
+手工创建后按项目补本地配置（已 gitignore，不会与基底冲突）：复制 `server/config.yaml.example` 为 `server/config.yaml` 并把 `jwt.secret` 换成随机值（生产模式会拒绝占位值）；部署前创建 `.deploy.env`（`PROJECT_NAME` 必填）；前端 `admin/apps/web-antd/.env` 的 `VITE_APP_NAMESPACE` 要按项目改（同域名下多个后台共用 namespace 会互相覆盖登录态）。
 
 ### 下游开发纪律
 
@@ -48,12 +56,12 @@ git push -u origin main
 **其余文件下游可自由修改**（工程脚手架和文档本来就该项目化）：
 
 - `CLAUDE.md` / `AGENTS.md` / `README.md`——改成项目自己的说明。
-- `dev.sh`、`deploy.sh`、`Makefile`、`.gitignore`、各类 `*.example` 配置模板；直接改允许，但想完全避开同步冲突，优先用下面的脚本挂载点扩展。
+- `dev.sh`、`deploy.sh`、`Makefile`、`.gitignore`、`.github/`、`scripts/`、各类 `*.example` 配置模板；直接改允许，但想完全避开同步冲突，优先用下面的脚本挂载点扩展。
 - 前端业务区 `admin/apps/web-antd/src/`（views、api、`router/routes/modules/`、locales、adapter 微调）。
 - 后端业务代码：新增 model/service/handler/dto/validator 文件（目录自动扫描，新增即生效）。
 - `server/go.mod` / `go.sum` 新增依赖：下游按业务需要 `go get` 即可（module 名不动就行）；sync-base 冲突时保留双方依赖行、跑一次 `go mod tidy`。前端 `package.json` 加依赖同理。
 
-**四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突：
+**四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突。这个承诺由 `make check-hooks`（`scripts/check-hooks.sh`，按 blob id 冻结）在基底 CI 中强制：
 
 - `server/internal/router/project.go`：注册下游业务路由；需要权限码的路由用 `middleware.RegisterRoutePermissions` 登记（示例见 `middleware/permission.go` 中该函数的注释与 README「权限说明」），只需登录的用 `RegisterAuthenticatedRoutes`。
 - `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
@@ -77,7 +85,18 @@ git push -u origin main
 
 **穿云隧道的两种写法别混用**：端口由 dev.sh 动态解析的服务（后端、admin、`dev.project.sh` 里启动的），一律在脚本里用 `chuanyun_up` 现取现用；只有 dev.sh **不启动**的固定端口服务才写进 `chuanyun.toml` 的 `[[tunnels]]`（该文件里的 port 按原样使用，不做端口避让）。`[[connects]]` 用来把同事已开的隧道接到本机端口，`local_port` 同样按原样占用；对方隧道的口令写 `chuanyun.local.toml`（gitignore），不写进 `chuanyun.toml`；dev.sh 会在解析自身端口之前先建立 connect，因此后续端口分配会自动避开它。隧道名一律带 `project` 前缀——公网地址不含项目信息，不加前缀跨项目必撞名。
 
-同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：下游没改过的基底文件取基底版本；下游改过的文件（脚本/文档/业务代码）人工合并——保留下游定制、吸收基底修复；拿不准某文件归属时用 `git log base/main -- <文件>` 查它是否来自基底。
+同步基底：`make sync-base` 默认合入基底最新版本标签；`make sync-base VERSION=v1.2.0` 指定版本，`VERSION=main` 合开发中的 main。基底标签在下游以 `base/v*` 命名空间存在，不与下游自己的标签冲突。`make base-version` 查看当前已合入版本（`.base-version`，由基底写入，下游不要手改）与远端最新版本；每个版本的升级步骤见基底 `CHANGELOG.md`。
+
+解决冲突原则：下游没改过的基底文件取基底版本；下游改过的文件（脚本/文档/业务代码）人工合并——保留下游定制、吸收基底修复；拿不准某文件归属时用 `git log base/main -- <文件>` 查它是否来自基底。
+
+### 基底发布（仅基底仓库本体）
+
+- 版本号语义：MAJOR = 同步后需要人工迁移；MINOR = 新功能/可选配置，可能要求重新登录；PATCH = 修 bug/文档。
+- 发布前必须在 `CHANGELOG.md` 写好 `## [X.Y.Z] - YYYY-MM-DD` 条目（含「升级步骤」），否则 `make base-release` 拒绝执行。
+- 发布：内容提交先推 main 等 CI 绿 → `make base-release VERSION=vX.Y.Z`（自动跑 `make base-check`：挂载点冻结、后端测试、交叉编译、脚本语法、Swagger 时效，然后写 `.base-version`、打标签、原子推送）。
+- `.base-version` 只由发布流程写入，任何人不要手改。
+- 改动挂载点会被 `make check-hooks` 拦下。确有必要时：改完用 `git hash-object` 更新 `scripts/check-hooks.sh` 里的冻结 id，并在 CHANGELOG 说明（下游会有一处冲突）。
+- swag 版本在 Makefile / dev.sh / deploy.sh / CI 四处钉死为 v1.16.6，改版本要四处一起改，否则 CI 的 docs 时效检查会误报。
 
 ## 工作原则
 
@@ -232,6 +251,15 @@ bash -n dev.sh && bash -n deploy.sh
 ## 常用命令
 
 ```bash
+# 新建项目（脚手架）
+go run github.com/xsxs89757/base/tools/create-base@latest <项目名> --origin <仓库地址>
+
+# 基底版本
+make sync-base                  # 下游合入基底最新版本
+make sync-base VERSION=main     # 合入开发中的 main
+make base-version               # 查看已合入版本与远端最新版本
+make base-release VERSION=v1.1.0  # 仅基底本体：发布新版本
+
 # 一键启动前后端（默认：端口被占用时自动改用空闲端口，可同机多项目并行）
 ./dev.sh          # 等价 make dev
 ./dev.sh --force  # 杀死占用进程、坚持用配置端口，等价 make dev-force
