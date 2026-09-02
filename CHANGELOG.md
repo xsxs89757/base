@@ -15,8 +15,10 @@
 
 ### 破坏性变更
 
-- **导入路径全变**：`base/config` 和 `base/internal/{dto,validator,model,store,middleware,service/admin,handler/admin}`
+- **导入路径全变**：`base/config` 和 `base/internal/{dto,validator,model,middleware,service/admin,handler/admin}`
   搬到 `github.com/xsxs89757/base-kit/*`（去掉 `internal` 前缀）。用 `make migrate-kit` 自动改写。
+  `base/internal/store` 和 `base/internal/router` **不变**：这两个包在本仓库仍然存在
+  （数据层与路由两个挂载点），`store.DB`、`store.IsUniqueViolation` 的写法一个字都不用改。
 - **`store.Init` 换签名**：`Init(store.Options) error`，不再 `log.Fatal`；模型和种子数据由参数传入。
   下游一般不直接调用它（`basekit.Run` 负责）。
 - **`main.go` 重写**：只剩 `basekit.Run(basekit.Options{...})` 和 Swagger 挂载。
@@ -31,6 +33,17 @@
 - `make migrate-kit` 改写导入路径；`make kit-dev` / `make kit-undev` 切换「用本地 ../base-kit 源码开发」。
 - `server/main_test.go` 冒烟测试：临时 sqlite 启动 → 登录 → 用户信息 → 菜单 → Swagger。
 - `deploy.sh` 用 `GOWORK=off` 编译，本地的 `go.work` 不会污染发布产物。
+
+### 升级前先看一眼
+
+如果你往 `internal/handler/admin/`、`internal/model/admin/`、`internal/middleware/` 这类
+基底目录里加过自己的文件，同步时基底只删自己那份，你的文件会留在原地。改写把引用方指向了 kit，
+你那些函数就会 `undefined`，报错信息看不出根因。`make migrate-kit` 结束时会把这些目录列出来。
+处理办法是把它们挪到自己的包（如 `internal/handler/biz/`）再改引用方的 import。
+真实项目里见过一个下游在 6 个基底目录中放了 48 个自己的文件，先看一眼能省很多时间。
+
+另外：如果你的项目当初是靠拷文件建的（没有和基底的共同 git 历史），`git merge` 会报
+「拒绝合并无关的历史」，`make sync-base` 用不了，只能照着本节手工移植。
 
 ### 已知约束
 
@@ -49,7 +62,11 @@
      或用 `basekit.Options.PreRoutes` 在本项目里覆盖。
 2. `make migrate-kit`（改写导入路径并 `go mod tidy`）。
 3. `make swagger && make test && make build`。
-4. `make dev` 用 super 登录走一遍用户/角色/菜单页。
+4. `make dev` 用 super 登录走一遍用户/角色/菜单页，再打一个自己的业务接口确认权限码仍然生效。
+
+整条路径已经在一个带业务代码（模型 + 接口 + 路由权限码 + 种子菜单）的下游项目上跑通：
+merge 无冲突、改写 4 个文件、编译测试通过、Swagger 30 条路径不变、
+启动后下游菜单正常种下、业务接口 super 通过 / 无权限角色 403。
 
 ## [1.0.1] - 2026-09-02
 
