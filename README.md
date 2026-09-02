@@ -4,7 +4,8 @@
 
 ## 技术栈
 
-### 后端 (server/)
+### 后端 (server/ + base-kit)
+- **[base-kit](https://github.com/xsxs89757/base-kit)** - 框架层与系统管理模块，`go get -u` 升级，不随模板 merge
 - **Fiber v2** - 高性能 Go Web 框架
 - **GORM** - Go ORM 框架 (默认 SQLite，可切换 MySQL/PostgreSQL)
 - **菜单权限码 RBAC** - 角色 → 菜单/按钮 auth_code → 路由，无额外策略表
@@ -169,28 +170,21 @@ pnpm dev:antd
 ├── scripts/check-hooks.sh       # 校验基底未改动下游挂载点
 ├── tools/create-base/           # 新项目脚手架 (独立 Go module)
 │
-├── server/                      # Go 后端
-│   ├── main.go                  # 入口文件
+├── server/                      # Go 后端（框架层在 base-kit，这里只有装配和业务代码）
+│   ├── main.go                  # 入口：basekit.Run(...) 把挂载点接给框架层
 │   ├── config.yaml.example      # 配置模板
 │   ├── .air.toml                # air 热更新配置 (macOS/Linux)
 │   ├── .air.windows.toml        # air 热更新配置 (Windows，dev.sh 自动选用)
-│   ├── config/                  # 配置解析
 │   ├── docs/                    # Swagger 生成物 (随仓库提交，main.go 依赖它编译)
 │   └── internal/
-│       ├── dto/                 # 数据传输对象
-│       │   ├── admin/           # 后台管理 DTO
-│       │   └── base.go          # 通用响应结构
-│       ├── handler/             # 路由处理器 (含 Swagger 注解)
-│       │   ├── admin/           # 后台管理 API
-│       │   └── api/             # 前台 API (预留)
-│       ├── middleware/          # JWT / 权限码 / 操作日志中间件
-│       ├── model/               # GORM 数据模型
-│       │   └── admin/           # 后台管理模型
-│       ├── router/              # 路由定义
-│       ├── service/             # 业务逻辑
-│       │   └── admin/           # 后台管理服务
-│       ├── store/               # 数据库初始化 & 种子数据
-│       └── validator/           # 请求验证
+│       ├── handler/api/         # 前台 API (预留)
+│       ├── router/
+│       │   ├── project.go       # ★ 挂载点：业务路由
+│       │   ├── router.go        # 汇总本项目路由，交给 basekit
+│       │   └── api.go           # 前台路由 (预留)
+│       └── store/
+│           ├── project.go       # ★ 挂载点：模型与种子数据
+│           └── kit.go           # 把挂载点接给 base-kit 的垫片
 │
 └── admin/                       # Vben Admin 后台前端
     ├── apps/
@@ -460,7 +454,7 @@ make base-version                  # 查看当前已合入版本与远端最新�
 
 权限模型是"菜单权限码 RBAC"，不依赖额外的策略表：
 
-- 每个需要保护的接口在 `server/internal/middleware/permission.go` 的路由表里映射到一个权限码（如 `System:User:Edit`），权限码存在菜单/按钮的 `auth_code` 字段上；
+- 每个需要保护的接口在 base-kit 的 `middleware` 路由表里映射到一个权限码（如 `System:User:Edit`），权限码存在菜单/按钮的 `auth_code` 字段上；下游用 `middleware.RegisterRoutePermissions` 登记自己的；
 - 角色通过 `role_menus` 关联菜单，用户持有的**启用**角色中任一关联了该权限码的启用菜单即放行；未登记的 `/admin` 路由对非 super 一律 403；
 - `JWTAuth` 每个请求以数据库为准核对用户状态和角色（进程内缓存 1 分钟，用户/角色变更即时失效），禁用用户、调整角色、修改密码立即生效，不用等 token 过期；
 - **super** 角色和 id=1 的内置超管绕过全部权限判定，且不能被普通管理员修改/删除；
@@ -487,6 +481,10 @@ middleware.RegisterRoutePermissions(
 - **MAJOR**：同步后需要 merge + `go mod tidy` 之外的人工迁移（删配置键、改挂载点签名、Vben 大版本）；
 - **MINOR**：新功能、新增可选配置或菜单，可能需要用户重新登录；
 - **PATCH**：修 bug、改文档。
+
+后端框架层单独版本化：`github.com/xsxs89757/base-kit`。模板的 `server/go.mod` 钉一个具体版本，
+下游想单独拿框架层的补丁可以 `cd server && go get -u github.com/xsxs89757/base-kit`，不必等基底发版。
+kit 的 MINOR 只增不改、数据库变更只增列，破坏性变更走 `/v2` 路径。
 
 基底维护者发布新版本（下游用不到）：
 

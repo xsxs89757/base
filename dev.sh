@@ -612,11 +612,13 @@ fi
 # 警告和报错也一并吞了。
 SWAG_NOISE='Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at '
 # swag 版本与 Makefile、CI 保持一致：不同版本的生成物有差异，CI 的 docs 时效检查会误报。
+# --parseDependencyLevel 3 让 swag 解析 module cache 里 base-kit 的 handler 注解（框架层已搬到那边），
+# --packagePrefix 限定只扫本模块和 kit，不扫 fiber/gorm，快 3 倍。
 # 用 go run 而不是 go install，省掉"装没装、装的哪个版本"的分歧（首次编译后有缓存）。
 SWAG_CMD=(go run github.com/swaggo/swag/cmd/swag@v1.16.6)
 echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
 SWAG_LOG=$(mktemp)
-if "${SWAG_CMD[@]}" init -g main.go -o docs --parseDependency --parseInternal >"$SWAG_LOG" 2>&1; then
+if "${SWAG_CMD[@]}" init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit >"$SWAG_LOG" 2>&1; then
     grep -vE "$SWAG_NOISE" "$SWAG_LOG" | sed 's/^/      /' || true
     echo -e "${GREEN}      Swagger 文档已生成${NC}"
 else

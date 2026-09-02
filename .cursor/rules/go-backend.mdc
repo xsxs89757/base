@@ -10,13 +10,17 @@ alwaysApply: true
 
 model → dto → validator → service → handler → router → swag init
 
-- `internal/model/admin/` - GORM 数据模型
-- `internal/dto/admin/` - 请求/响应 DTO
-- `internal/validator/admin/` - 请求验证规则
-- `internal/service/admin/` - 业务逻辑
-- `internal/handler/admin/` - HTTP 处理器 + Swagger 注解
-- `internal/router/` - 路由注册
-- `internal/middleware/` - JWT, 权限码 (PermissionAuth, 路由表在 permission.go), 操作日志
+框架层（config / dto / validator / model / store / middleware / service.admin /
+handler.admin / router.SetupAdmin）在 github.com/xsxs89757/base-kit，模板里只有装配和业务代码。
+
+下游业务代码的落点:
+- `internal/model/<biz>/` - GORM 数据模型
+- `internal/dto/<biz>/` - 请求/响应 DTO
+- `internal/validator/<biz>/` - 请求验证规则
+- `internal/service/<biz>/` - 业务逻辑
+- `internal/handler/<biz>/` - HTTP 处理器 + Swagger 注解
+- `internal/router/project.go` - 路由注册 + middleware.RegisterRoutePermissions 登记权限码
+- `internal/store/project.go` - 模型登记与种子数据
 
 ## Swagger 注解
 
@@ -26,7 +30,8 @@ Tags 命名规范:
 - 后台: `认证`, `用户`, `系统管理 - 角色` 等
 - 前台 (将来): `前台 - xxx`
 
-生成命令: `swag init -g main.go -o docs --parseDependency --parseInternal`
+生成命令: `swag init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit`
+(parseDependencyLevel 3 让 swag 解析 module cache 里 base-kit 的 handler 注解)
 
 ## 响应格式
 

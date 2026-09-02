@@ -18,7 +18,7 @@ ifeq ($(FORCE),1)
 DEV_FLAGS += --force
 endif
 
-.PHONY: help dev dev-force force-dev release publish release-server publish-server release-admin publish-admin build build-server build-admin test test-server swagger sync-base check-hooks base-check base-release base-version new
+.PHONY: help dev dev-force force-dev release publish release-server publish-server release-admin publish-admin build build-server build-admin test test-server swagger sync-base check-hooks base-check base-release base-version new migrate-kit kit-dev kit-undev
 
 help:
 	@echo "Admin 管理系统快捷命令"
@@ -49,6 +49,11 @@ help:
 	@echo "  make base-release VERSION=vX.Y.Z   打版本标签并推送"
 	@echo "  make new NAME=demo    用本地代码跑一遍脚手架 (开发脚手架时用)"
 	@echo ""
+	@echo "框架层 (base-kit):"
+	@echo "  make migrate-kit      从 v2.0.0 之前的版本同步后，改写 import 路径"
+	@echo "  make kit-dev          用本地 ../base-kit 源码开发框架层 (生成 server/go.work)"
+	@echo "  make kit-undev        改回按 go.mod 钉死的版本"
+	@echo ""
 	@echo "验证/构建:"
 	@echo "  make test             运行后端测试"
 	@echo "  make build            构建后端和前端"
@@ -73,6 +78,24 @@ release-admin publish-admin:
 release-%:
 	@./deploy.sh $* $(PROJECT)
 
+# 框架层在 github.com/xsxs89757/base-kit，用 go get -u 升级；下面三个目标只在少数场景用到
+migrate-kit:
+	@echo "==> 改写 import 路径 (base/internal/* -> base-kit)"
+	@cd server && go run github.com/xsxs89757/base-kit/cmd/basekit-migrate@latest ./...
+	@cd server && go mod tidy
+	@echo "==> 完成，接着跑 make swagger && make test"
+
+# 同时改 kit 和模板时用：go.work 让模板直接编译 ../base-kit 的源码，改完 kit 不用发版就能验证。
+# go.work 已 gitignore；deploy.sh 用 GOWORK=off 编译，发布永远按 go.mod 钉死的版本。
+kit-dev:
+	@[ -d ../base-kit ] || { echo "未找到 ../base-kit，先 git clone https://github.com/xsxs89757/base-kit.git"; exit 1; }
+	@cd server && go work init . ../../base-kit 2>/dev/null || true
+	@cd server && go list -m -f '  base-kit 现在解析到 {{.Dir}}' github.com/xsxs89757/base-kit
+
+kit-undev:
+	@rm -f server/go.work server/go.work.sum
+	@cd server && go list -m -f '  base-kit 现在解析到 {{.Dir}}' github.com/xsxs89757/base-kit
+
 build: build-server build-admin
 
 build-server:
@@ -87,7 +110,7 @@ test-server:
 	@cd server && go test ./...
 
 swagger:
-	@cd server && $(SWAG) init -g main.go -o docs --parseDependency --parseInternal
+	@cd server && $(SWAG) init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit
 
 # ---------------------------------------------------------------------------
 # 基底与下游同步

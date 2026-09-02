@@ -351,7 +351,7 @@ deploy_server() {
     # 与 dev.sh 同策略：滤掉 600+ 行流水账，只留警告/报错（不用 -q，它把警告也吞了）
     local swag_log
     swag_log=$(mktemp)
-    if go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependency --parseInternal >"$swag_log" 2>&1; then
+    if go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit >"$swag_log" 2>&1; then
         grep -vE 'Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at ' "$swag_log" | sed 's/^/        /' || true
     else
         echo -e "${RED}        Swagger 生成失败（继续用上一次的文档）:${NC}"
@@ -362,7 +362,8 @@ deploy_server() {
     BIN_NAME="$SERVER_BIN_NAME"
     [ "$TARGET_OS" = "windows" ] && BIN_NAME="${BIN_NAME}.exe"
 
-    CGO_ENABLED=0 GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -ldflags="-s -w" -o "$BUILD_DIR/$BIN_NAME" .
+    # GOWORK=off: 本地可能有 go.work 把 base-kit 指向源码副本，发布必须按 go.mod 里钉死的版本编译
+    CGO_ENABLED=0 GOWORK=off GOOS="$TARGET_OS" GOARCH="$TARGET_ARCH" go build -ldflags="-s -w" -o "$BUILD_DIR/$BIN_NAME" .
     cp config.prod.yaml "$BUILD_DIR/config.yaml"
     echo -e "${GREEN}        编译完成: $BIN_NAME (使用生产配置)${NC}"
 

@@ -6,7 +6,8 @@
 
 这是一个后台管理系统：
 
-- 后端：`server/`，Go Fiber v2 + GORM + JWT + Swagger/OpenAPI；权限为菜单权限码 RBAC（`internal/middleware/permission.go`）。
+- 后端：`server/`，Go Fiber v2 + GORM + JWT + Swagger/OpenAPI；权限为菜单权限码 RBAC。
+- **后端框架层是外部依赖**：配置、鉴权、权限码、数据层与整套系统管理模块在 `github.com/xsxs89757/base-kit`（本地开发副本约定放在仓库同级目录 `../base-kit`）。`server/` 只剩 `main.go`（装配）、两个挂载点和业务代码。
 - 前端：`admin/`，Vben Admin v5 + Vue 3 + TypeScript + Ant Design Vue + Vite + Pinia + Tailwind CSS。
 - 前端应用主路径：`admin/apps/web-antd/src/`。
 - 后端管理接口前缀：`/admin`。
@@ -45,20 +46,27 @@ git push -u origin main
 
 按后续 `make sync-base` 的合并成本，把文件分为两类：
 
-**核心文件——不建议在下游就地修改，优先到基底仓库改、推送后回下游 `make sync-base` 合入：**
+**后端框架层不在仓库里，改不了也不用改**：配置、鉴权、权限码、数据层、系统管理模块（用户/角色/菜单/部门/配置/操作日志）都在 `github.com/xsxs89757/base-kit`。修 bug 或加通用功能到 kit 仓库提，下游 `go get -u github.com/xsxs89757/base-kit` 就拿到，不再产生 merge 冲突。
 
-- `server/` 框架层：`config/`、`internal/middleware/`、`internal/store/store.go`、`internal/dto/base.go`，以及基底自带的 `model/admin/`、`service/admin/`、`handler/admin/`、`validator/`、`router/admin.go`、`main.go`。
+kit 提供的扩展点（够用就别 fork）：
+
+- 加接口：`basekit.Options.Routes`（业务路由）；**覆盖 kit 的某个接口**用 `PreRoutes`，Fiber 先注册先匹配。
+- 加模型/种子：`Options.Models` / `Options.Seed`，也就是两个挂载点文件。
+- 给基底表加列：扩展结构**只声明表名、主键和新列**，登记到 `Options.Models`。不要嵌入 `adminmodel.User`——嵌入会把 `Roles` many2many 带过来，往共享的 `user_roles` 加一列 `<结构名>_id`，通过嵌入结构写入时 `user_id` 为 NULL，kit 按 `user_id` 查角色会静默失效（kit 的 `store/embed_test.go` 锁定了这个约束）。
+- 读自己的配置段：`config.LoadExtra(&myCfg)`。
+
+**仍需谨慎修改的核心文件：**
+
 - `admin/` 的 vben 框架部分：`packages/`、`internal/` 等封装层。
+- `server/main.go`：装配代码，基底会跟着 kit 的 API 演进而改。
 - `server/go.mod`：仅限制 **module 名必须保持 `base`**（唯一硬性禁令）——改名会让全部 import 路径与基底 diverge，之后每次 merge 大面积冲突。**新增依赖不受限**，见下。
-
-这些文件基底会持续修 bug、加功能，下游就地改会在每次同步时反复冲突。确有基底满足不了的项目特殊需求时也可以改，但要自己承担后续的合并成本；通用性的改进请回流基底，所有项目受益。
 
 **其余文件下游可自由修改**（工程脚手架和文档本来就该项目化）：
 
 - `CLAUDE.md` / `AGENTS.md` / `README.md`——改成项目自己的说明。
 - `dev.sh`、`deploy.sh`、`Makefile`、`.gitignore`、`.github/`、`scripts/`、各类 `*.example` 配置模板；直接改允许，但想完全避开同步冲突，优先用下面的脚本挂载点扩展。
 - 前端业务区 `admin/apps/web-antd/src/`（views、api、`router/routes/modules/`、locales、adapter 微调）。
-- 后端业务代码：新增 model/service/handler/dto/validator 文件（目录自动扫描，新增即生效）。
+- 后端业务代码：在 `server/internal/` 下按 model/dto/service/handler/validator 分层新增文件，路由注册在 `router/project.go`。
 - `server/go.mod` / `go.sum` 新增依赖：下游按业务需要 `go get` 即可（module 名不动就行）；sync-base 冲突时保留双方依赖行、跑一次 `go mod tidy`。前端 `package.json` 加依赖同理。
 
 **四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突。这个承诺由 `make check-hooks`（`scripts/check-hooks.sh`，按 blob id 冻结）在基底 CI 中强制：
@@ -108,30 +116,44 @@ git push -u origin main
 
 ## 后端开发规则
 
+### 框架层在哪
+
+配置、JWT 鉴权、菜单权限码、数据层、系统管理模块都在 `github.com/xsxs89757/base-kit`：
+
+| 需求 | 去哪 |
+| --- | --- |
+| 改框架层的 bug / 加通用能力 | kit 仓库（本地 `../base-kit`），发版后 `go get -u` |
+| 同时改 kit 和模板 | `make kit-dev` 生成 `server/go.work` 直接编译本地 kit 源码，改完 `make kit-undev` |
+| 加业务接口 | `server/internal/` 新增文件 + `router/project.go` 注册 |
+| 覆盖 kit 的某个接口 | `main.go` 里用 `basekit.Options.PreRoutes` 注册同路径 |
+| 给 sys_users 等基底表加列 | 扩展结构只声明表名/主键/新列，登记到 `Options.Models`（**不要嵌入 kit 的模型**） |
+
+`server/go.work` 已 gitignore，`deploy.sh` 用 `GOWORK=off` 编译，发布永远按 `go.mod` 钉死的 kit 版本。
+
 ### 分层路径
 
-后台管理功能按下面顺序补齐：
+后台管理功能按下面顺序补齐（这些目录的基底实现已搬到 kit，下面说的是**下游新增业务**的落点）：
 
 1. `server/internal/model/admin/`：GORM 数据模型。
 2. `server/internal/dto/admin/`：请求/响应 DTO。
 3. `server/internal/validator/admin/`：请求校验。
 4. `server/internal/service/admin/`：业务逻辑。
 5. `server/internal/handler/admin/`：HTTP handler 和 Swagger 注解。
-6. `server/internal/router/admin.go`：注册 `/admin/*` 路由（下游项目改为注册到 `router/project.go`，见「基底与下游项目」）。
+6. `server/internal/router/project.go`：注册路由，并用 `middleware.RegisterRoutePermissions` 登记权限码。
 7. `server/docs/`：API 变更后重新生成 Swagger。
 
 公共层：
 
-- `server/internal/dto/base.go` 提供统一响应：`dto.Success`、`dto.PageSuccess`、`dto.Fail`。
-- `server/internal/middleware/` 放 JWT、权限码（`PermissionAuth`）、操作日志等中间件。`JWTAuth` 每个请求以数据库为准核对用户状态与启用角色（进程内缓存 1 分钟），改用户/角色/密码的 handler 必须调 `middleware.InvalidateUserAuthCache`；角色/菜单变更调 `InvalidatePermissionCache`。
-- `server/internal/store/` 放数据库和共享存储初始化。
+- 统一响应在 kit 的 `dto` 包：`dto.Success`、`dto.PageSuccess`、`dto.Fail`、`dto.ParsePage`。
+- 中间件在 kit 的 `middleware` 包：JWT、权限码（`PermissionAuth`）、操作日志。`JWTAuth` 每个请求以数据库为准核对用户状态与启用角色（进程内缓存 1 分钟），改用户/角色/密码时必须调 `middleware.InvalidateUserAuthCache`；角色/菜单变更调 `InvalidatePermissionCache`。
+- 数据层在 kit 的 `store` 包（`store.DB`、`store.IsUniqueViolation`、种子助手）；模板的 `internal/store` 只是把两个挂载点接给 kit 的垫片。
 
 ### API 和响应
 
 - Handler 返回统一响应格式，不直接拼零散 JSON。
 - 列表接口使用分页结构：`items` + `total`。
 - 管理端业务接口放在 `/admin` 前缀下；公共前台 API 才放 `/api`。
-- 新增、修改、删除管理端接口必须确认 JWT、权限码（在 `middleware/permission.go` 的路由表登记，未登记的 `/admin` 路由对非 super 一律 403）和操作日志是否应该覆盖。
+- 新增、修改、删除管理端接口必须确认 JWT、权限码（用 `middleware.RegisterRoutePermissions` 登记，未登记的 `/admin` 路由对非 super 一律 403）和操作日志是否应该覆盖。
 - id=1 的用户是超级管理员：不受普通权限限制，不出现在普通用户列表，不允许被修改或删除。持有 `super` 角色的用户同样受保护：非 super 操作者不得修改/删除，也不能把 super 角色分配出去。
 
 ### Swagger
@@ -155,7 +177,7 @@ Tags 命名保持业务可读：
 API 变更后在 `server/` 下执行：
 
 ```bash
-swag init -g main.go -o docs --parseDependency --parseInternal
+swag init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit
 ```
 
 ### GORM 注意事项
@@ -235,7 +257,7 @@ swag init -g main.go -o docs --parseDependency --parseInternal
 # 后端
 cd server
 go test ./...
-swag init -g main.go -o docs --parseDependency --parseInternal
+swag init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit
 
 # 前端
 cd admin

@@ -25,6 +25,9 @@ server/*.exe
 server/tmp
 server/config.yaml
 server/config.prod.yaml
+# 本地把 base-kit 换成源码调试用（go.work），绝不能提交：提交了所有下游都会按本地路径编译
+server/go.work
+server/go.work.sum
 # server/docs 不再忽略：main.go import base/docs，fresh clone 若无该目录直接编译失败
 # （"package base/docs is not in std"），Windows/CI 上未装 swag 就起不来。生成物随仓库提交，
 # API 变更后用 swag init 重新生成并一起提交。

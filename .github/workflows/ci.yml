@@ -60,7 +60,7 @@ jobs:
       # swag 版本与 Makefile 钉死同一个，否则不同版本的生成物差异会造成误报
       - name: Swagger 文档时效
         run: |
-          (cd server && go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependency --parseInternal)
+          (cd server && go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit)
           git diff --exit-code -- server/docs || {
             echo "::error::server/docs 已过期，请本地执行 make swagger 后提交生成物"
             exit 1

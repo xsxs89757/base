@@ -8,6 +8,49 @@
 
 ## [Unreleased]
 
+## [2.0.0] - 2026-09-02
+
+后端框架层搬到独立仓库 [base-kit](https://github.com/xsxs89757/base-kit)，从此框架层的 bug 修复和新功能
+走 `go get -u`，不再靠 git merge 一个文件一个文件地合。`server/` 里只剩装配代码、两个挂载点和业务代码。
+
+### 破坏性变更
+
+- **导入路径全变**：`base/config` 和 `base/internal/{dto,validator,model,store,middleware,service/admin,handler/admin}`
+  搬到 `github.com/xsxs89757/base-kit/*`（去掉 `internal` 前缀）。用 `make migrate-kit` 自动改写。
+- **`store.Init` 换签名**：`Init(store.Options) error`，不再 `log.Fatal`；模型和种子数据由参数传入。
+  下游一般不直接调用它（`basekit.Run` 负责）。
+- **`main.go` 重写**：只剩 `basekit.Run(basekit.Options{...})` 和 Swagger 挂载。
+- **swag 命令换参数**：`--parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit`
+  （`--parseDependency` 只解析模型不解析路由，kit 的接口会全部丢失）。Makefile / dev.sh / deploy.sh / CI 已同步。
+- 生成的 `swagger.json` 路径与定义**与 v1.0.1 完全一致**，前端不受影响。
+
+### 新增
+
+- `basekit.Options` 扩展点：`Models` / `Seed` / `Routes`（业务路由）/ `PreRoutes`（覆盖 kit 接口）/
+  `Swagger` / `Fiber` / `Config`（测试注入）。
+- `make migrate-kit` 改写导入路径；`make kit-dev` / `make kit-undev` 切换「用本地 ../base-kit 源码开发」。
+- `server/main_test.go` 冒烟测试：临时 sqlite 启动 → 登录 → 用户信息 → 菜单 → Swagger。
+- `deploy.sh` 用 `GOWORK=off` 编译，本地的 `go.work` 不会污染发布产物。
+
+### 已知约束
+
+- 给 `sys_users` 等基底表加列时，扩展结构**只能声明表名、主键和新列**，不能嵌入 `adminmodel.User`：
+  嵌入会把 `Roles` many2many 带过来，往共享的 `user_roles` 表加一列 `<结构名>_id`，
+  通过嵌入结构写入时 `user_id` 为 NULL，kit 的 handler 按 `user_id` 查角色会静默失效。
+  详见 base-kit 的 README 与 `store/embed_test.go`。
+
+### 升级步骤
+
+1. `make sync-base`。预期冲突：
+   - `server/go.mod` / `go.sum`：保留 `module base` 一行，两边的 require 都留下，稍后 `go mod tidy` 收拾；
+   - `server/main.go`：如果改过，取基底版本再把自己的定制搬到 `basekit.Options` 的回调里；
+   - `server/docs/*`：取基底版本，第 3 步会重新生成；
+   - 改过 kit 已接管的核心文件时会出现 modify/delete 冲突：删掉本地版本，把改动改成给 kit 提 PR，
+     或用 `basekit.Options.PreRoutes` 在本项目里覆盖。
+2. `make migrate-kit`（改写导入路径并 `go mod tidy`）。
+3. `make swagger && make test && make build`。
+4. `make dev` 用 super 登录走一遍用户/角色/菜单页。
+
 ## [1.0.1] - 2026-09-02
 
 ### 修复
@@ -72,6 +115,7 @@
 5. 检查生产 `config.yaml`：`mode: production` 时 `jwt.secret` 必须 ≥32 位且不是示例占位值，
    否则服务拒绝启动。生成方式：`openssl rand -base64 48`。
 
-[Unreleased]: https://github.com/xsxs89757/base/compare/v1.0.1...HEAD
+[Unreleased]: https://github.com/xsxs89757/base/compare/v2.0.0...HEAD
+[2.0.0]: https://github.com/xsxs89757/base/compare/v1.0.1...v2.0.0
 [1.0.1]: https://github.com/xsxs89757/base/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/xsxs89757/base/releases/tag/v1.0.0

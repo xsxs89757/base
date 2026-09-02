@@ -2,20 +2,15 @@ package main
 
 import (
 	"fmt"
-	"log"
 
-	"base/config"
 	"base/docs"
 	"base/internal/router"
 	"base/internal/store"
-	"base/internal/validator"
-	_ "base/internal/validator/admin"
+
+	basekit "github.com/xsxs89757/base-kit"
+	"github.com/xsxs89757/base-kit/config"
 
 	"github.com/gofiber/fiber/v2"
-	"github.com/gofiber/fiber/v2/middleware/compress"
-	"github.com/gofiber/fiber/v2/middleware/cors"
-	"github.com/gofiber/fiber/v2/middleware/logger"
-	"github.com/gofiber/fiber/v2/middleware/recover"
 	"github.com/gofiber/swagger"
 )
 
@@ -36,68 +31,27 @@ import (
 // @name Authorization
 // @description 输入 Bearer {token} 格式的 JWT 令牌
 
+// 框架层（配置、鉴权、权限码、数据层、系统管理模块）在 github.com/xsxs89757/base-kit，
+// 用 go get -u 升级，不再随模板 merge。本文件只负责把项目自己的东西挂上去：
+// 模型和种子数据在 internal/store/project.go，业务路由在 internal/router/project.go。
 func main() {
-	if err := config.Load("config.yaml"); err != nil {
-		log.Fatalf("failed to load config: %v", err)
-	}
-	// 生产模式下占位/过短的 jwt.secret 直接拒绝启动：否则任何人都能伪造超管 token
-	if err := config.ValidateProduction(); err != nil {
-		log.Fatalf("refusing to start: %v (generate one with: openssl rand -base64 48)", err)
-	}
+	basekit.Run(basekit.Options{
+		Models:  store.ProjectModels(),
+		Seed:    store.ProjectSeed,
+		Routes:  router.Setup,
+		Swagger: mountSwagger,
+	})
+}
 
-	validator.Init()
-	store.Init()
-
-	appCfg := fiber.Config{
-		ErrorHandler: func(c *fiber.Ctx, err error) error {
-			code := fiber.StatusInternalServerError
-			if e, ok := err.(*fiber.Error); ok {
-				code = e.Code
-			}
-			return c.Status(code).JSON(fiber.Map{
-				"code":    -1,
-				"data":    nil,
-				"error":   err.Error(),
-				"message": err.Error(),
-			})
-		},
+// mountSwagger 只在配置 enable_swagger 为 true 时被调用。
+// Swagger 生成物属于本项目（docs/ 随仓库提交，main.go import 了它），kit 不依赖 swag。
+func mountSwagger(app *fiber.App) {
+	docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%d", config.C.Server.Port)
+	if config.C.Server.SwaggerTitle != "" {
+		docs.SwaggerInfo.Title = config.C.Server.SwaggerTitle
 	}
-	// 请求体上限走配置（server.body_limit_mb），未配置时保持 Fiber 默认 4MB
-	if config.C.Server.BodyLimitMB > 0 {
-		appCfg.BodyLimit = config.C.Server.BodyLimitMB * 1024 * 1024
+	if config.C.Server.SwaggerDesc != "" {
+		docs.SwaggerInfo.Description = config.C.Server.SwaggerDesc
 	}
-	app := fiber.New(appCfg)
-
-	app.Use(recover.New())
-	app.Use(logger.New())
-	// gzip/brotli 压缩：客户端带 Accept-Encoding 才生效，公网/frp 场景收益明显
-	app.Use(compress.New())
-	corsOrigins := config.C.Server.CorsOrigins
-	if corsOrigins == "" {
-		corsOrigins = "*"
-	}
-	app.Use(cors.New(cors.Config{
-		AllowOrigins:     corsOrigins,
-		AllowMethods:     "GET,POST,PUT,DELETE,OPTIONS",
-		AllowHeaders:     "Origin,Content-Type,Accept,Authorization,Accept-Language",
-		AllowCredentials: corsOrigins != "*",
-	}))
-
-	if config.C.Server.EnableSwagger {
-		docs.SwaggerInfo.Host = fmt.Sprintf("localhost:%d", config.C.Server.Port)
-		if config.C.Server.SwaggerTitle != "" {
-			docs.SwaggerInfo.Title = config.C.Server.SwaggerTitle
-		}
-		if config.C.Server.SwaggerDesc != "" {
-			docs.SwaggerInfo.Description = config.C.Server.SwaggerDesc
-		}
-		app.Get("/swagger/*", swagger.HandlerDefault)
-		log.Printf("Swagger UI: http://localhost:%d/swagger/index.html", config.C.Server.Port)
-	}
-
-	router.Setup(app)
-
-	addr := fmt.Sprintf(":%d", config.C.Server.Port)
-	log.Printf("Server starting on %s", addr)
-	log.Fatal(app.Listen(addr))
+	app.Get("/swagger/*", swagger.HandlerDefault)
 }
