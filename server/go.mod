@@ -6,7 +6,7 @@ require (
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/gofiber/swagger v1.1.1
 	github.com/swaggo/swag v1.16.6
-	github.com/xsxs89757/base-kit v1.0.0
+	github.com/xsxs89757/base-kit v1.0.2
 	gorm.io/gorm v1.31.2
 )
 
