@@ -1,13 +1,13 @@
 # Admin 后台管理系统
 
-基于 **Go Fiber + GORM + Casbin + JWT** 后端 和 **Vben Admin (Vue 3 + Ant Design Vue)** 前端的后台管理基础框架。
+基于 **Go Fiber + GORM + JWT** 后端 和 **Vben Admin (Vue 3 + Ant Design Vue)** 前端的后台管理基础框架。
 
 ## 技术栈
 
 ### 后端 (server/)
 - **Fiber v2** - 高性能 Go Web 框架
 - **GORM** - Go ORM 框架 (默认 SQLite，可切换 MySQL/PostgreSQL)
-- **Casbin v3** - 基于 RBAC 的权限控制
+- **菜单权限码 RBAC** - 角色 → 菜单/按钮 auth_code → 路由，无额外策略表
 - **JWT** - Token 认证
 - **Swagger/OpenAPI** - API 文档自动生成
 
@@ -167,7 +167,7 @@ pnpm dev:antd
 │       ├── handler/             # 路由处理器 (含 Swagger 注解)
 │       │   ├── admin/           # 后台管理 API
 │       │   └── api/             # 前台 API (预留)
-│       ├── middleware/          # JWT / Casbin / 操作日志中间件
+│       ├── middleware/          # JWT / 权限码 / 操作日志中间件
 │       ├── model/               # GORM 数据模型
 │       │   └── admin/           # 后台管理模型
 │       ├── router/              # 路由定义
@@ -432,10 +432,34 @@ make sync-base   # 等价 git fetch base && git merge base/main
 
 ## 权限说明
 
-系统采用 Casbin RBAC 模型：
-- **super** 角色：超级管理员，Casbin 和菜单/权限码全部绕过
-- **admin** 角色：可读写系统管理模块
-- **user** 角色：仅可查看基础信息
+权限模型是"菜单权限码 RBAC"，不依赖额外的策略表：
+
+- 每个需要保护的接口在 `server/internal/middleware/permission.go` 的路由表里映射到一个权限码（如 `System:User:Edit`），权限码存在菜单/按钮的 `auth_code` 字段上；
+- 角色通过 `role_menus` 关联菜单，用户持有的**启用**角色中任一关联了该权限码的启用菜单即放行；未登记的 `/admin` 路由对非 super 一律 403；
+- `JWTAuth` 每个请求以数据库为准核对用户状态和角色（进程内缓存 1 分钟，用户/角色变更即时失效），禁用用户、调整角色、修改密码立即生效，不用等 token 过期；
+- **super** 角色和 id=1 的内置超管绕过全部权限判定，且不能被普通管理员修改/删除；
+- **admin** 角色：种子默认拥有系统管理全部菜单；**user** 角色：仅基础查看。
+
+下游项目给自己的路由登记权限码（写在 `server/internal/router/project.go`）：
+
+```go
+middleware.RegisterRoutePermissions(
+    middleware.RoutePermission{Method: "GET", Path: "/admin/shop/order/list", Code: "Shop:Order:List"},
+    middleware.RoutePermission{Method: "PUT", Path: "/admin/shop/order/:id", Code: "Shop:Order:Edit"},
+)
+```
+
+只需登录、不校验权限码的路由用 `middleware.RegisterAuthenticatedRoutes`。`middleware.CasbinAuth()` 是 `PermissionAuth()` 的旧名，仍可使用。
+
+## 升级说明（2026-09 鉴权加固）
+
+从更早的基底同步到本版本后：
+
+- token 增加了类型标记，所有已登录用户需要重新登录一次；
+- Casbin 已移除，旧库里的 `casbin_rule` 表不再使用，可手动 `DROP TABLE casbin_rule`；
+- 角色/用户/配置改为物理删除，启动时自动清掉历史软删除行，此前"删过就建不了同名"的问题消失；
+- 演示菜单 Analytics / About 会在启动时自动移除，首页改为 `/workspace` 工作台；
+- `mode: production` 现在真的生效：`jwt.secret` 必须至少 32 位且不能是示例占位值，否则拒绝启动；生产库只创建 `super` 账号，且每次启动会检查它是否还在用默认密码。
 
 ## 切换数据库
 

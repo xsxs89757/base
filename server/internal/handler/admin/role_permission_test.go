@@ -10,8 +10,8 @@ import (
 	"base/internal/store"
 	"base/internal/validator"
 
-	"github.com/gofiber/fiber/v2"
 	"github.com/glebarez/sqlite"
+	"github.com/gofiber/fiber/v2"
 	"gorm.io/gorm"
 )
 

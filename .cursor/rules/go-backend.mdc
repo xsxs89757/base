@@ -16,7 +16,7 @@ model → dto → validator → service → handler → router → swag init
 - `internal/service/admin/` - 业务逻辑
 - `internal/handler/admin/` - HTTP 处理器 + Swagger 注解
 - `internal/router/` - 路由注册
-- `internal/middleware/` - JWT, Casbin, 操作日志
+- `internal/middleware/` - JWT, 权限码 (PermissionAuth, 路由表在 permission.go), 操作日志
 
 ## Swagger 注解
 
@@ -26,7 +26,7 @@ Tags 命名规范:
 - 后台: `认证`, `用户`, `系统管理 - 角色` 等
 - 前台 (将来): `前台 - xxx`
 
-生成命令: `swag init -g main.go -o docs --parseDependency`
+生成命令: `swag init -g main.go -o docs --parseDependency --parseInternal`
 
 ## 响应格式
 

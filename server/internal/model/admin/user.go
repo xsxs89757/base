@@ -1,6 +1,10 @@
 package admin
 
-import "base/internal/model"
+import (
+	"time"
+
+	"base/internal/model"
+)
 
 type User struct {
 	model.BaseModel
@@ -13,7 +17,10 @@ type User struct {
 	Status   int    `json:"status" gorm:"comment:0=disabled 1=enabled"`
 	HomePath string `json:"homePath,omitempty" gorm:"size:128"`
 	Remark   string `json:"remark" gorm:"size:256"`
-	Roles    []Role `json:"roles" gorm:"many2many:user_roles;"`
+	// PasswordChangedAt 最近一次改密时间：JWTAuth 会拒绝签发时间早于它的 access token，
+	// 实现"改密即全端下线"。NULL 表示从未改过（旧数据升级后不会误伤现有会话）。
+	PasswordChangedAt *time.Time `json:"-"`
+	Roles             []Role     `json:"roles" gorm:"many2many:user_roles;"`
 }
 
 func (User) TableName() string {

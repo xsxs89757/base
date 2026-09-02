@@ -18,8 +18,11 @@ async function initApplication() {
     namespace,
     overrides: overridesPreferences,
   });
-  // 后台权限由服务端菜单和权限码驱动，避免旧缓存停留在 frontend 模式。
-  updatePreferences({ app: { accessMode: 'backend' } });
+  // 后台权限由服务端菜单和权限码驱动，避免旧缓存停留在 frontend 模式；
+  // 首页同理：localStorage 里的旧偏好会盖过 overrides，演示页 /analytics 已删除，必须强制指回 /workspace。
+  updatePreferences({
+    app: { accessMode: 'backend', defaultHomePath: '/workspace' },
+  });
 
   // 启动应用并挂载
   // vue应用主要逻辑及视图

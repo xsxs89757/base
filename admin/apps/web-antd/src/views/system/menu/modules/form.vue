@@ -157,22 +157,29 @@ const schema: VbenFormSchema[] = [
       },
       triggerFields: ['type'],
     },
-    fieldName: 'activePath',
+    // 后端把 activePath 放在 meta 里返回、提交时再由 onSubmit 展平到顶层，
+    // 字段必须挂在 meta 下，否则编辑时填不回、保存时又被清空
+    fieldName: 'meta.activePath',
     help: $t('system.menu.activePathHelp'),
     label: $t('system.menu.activePath'),
+    // 允许空串：清空输入框即取消激活路径（后端收到 '' 会把 active_path 置空）
     rules: z
-      .string()
-      .min(2, $t('ui.formRules.minLength', [$t('system.menu.path'), 2]))
-      .max(100, $t('ui.formRules.maxLength', [$t('system.menu.path'), 100]))
-      .refine(
-        (value: string) => {
-          return value.startsWith('/');
-        },
-        $t('ui.formRules.startWith', [$t('system.menu.path'), '/']),
+      .literal('')
+      .or(
+        z
+          .string()
+          .min(2, $t('ui.formRules.minLength', [$t('system.menu.path'), 2]))
+          .max(100, $t('ui.formRules.maxLength', [$t('system.menu.path'), 100]))
+          .refine(
+            (value: string) => {
+              return value.startsWith('/');
+            },
+            $t('ui.formRules.startWith', [$t('system.menu.path'), '/']),
+          )
+          .refine(async (value: string) => {
+            return await isMenuPathExists(value, formData.value?.id);
+          }, $t('system.menu.activePathMustExist')),
       )
-      .refine(async (value: string) => {
-        return await isMenuPathExists(value, formData.value?.id);
-      }, $t('system.menu.activePathMustExist'))
       .optional(),
   },
   {

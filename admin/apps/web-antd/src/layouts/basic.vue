@@ -1,7 +1,7 @@
 <script lang="ts" setup>
-import { computed, ref, watch } from 'vue';
+import { computed, watch } from 'vue';
 
-import { AuthenticationLoginExpiredModal } from '@vben/common-ui';
+import { AuthenticationLoginExpiredModal, useVbenModal } from '@vben/common-ui';
 import { useWatermark } from '@vben/hooks';
 import { BasicLayout, UserDropdown } from '@vben/layouts';
 import { preferences } from '@vben/preferences';
@@ -11,19 +11,22 @@ import { $t } from '#/locales';
 import { useAuthStore } from '#/store';
 import LoginForm from '#/views/_core/authentication/login.vue';
 
-import ChangePasswordModal from './change-password-modal.vue';
+import ChangePasswordForm from './change-password-modal.vue';
 
 const userStore = useUserStore();
 const authStore = useAuthStore();
 const accessStore = useAccessStore();
 const { destroyWatermark, updateWatermark } = useWatermark();
 
-const changePasswordRef = ref<InstanceType<typeof ChangePasswordModal>>();
+// destroyOnClose 默认开启：每次打开都是干净的表单
+const [ChangePasswordModal, changePasswordModalApi] = useVbenModal({
+  connectedComponent: ChangePasswordForm,
+});
 
 const menus = computed(() => [
   {
     handler: () => {
-      changePasswordRef.value?.show();
+      changePasswordModalApi.open();
     },
     icon: 'lucide:key-round',
     text: $t('common.changePassword'),
@@ -78,7 +81,7 @@ watch(
       >
         <LoginForm />
       </AuthenticationLoginExpiredModal>
-      <ChangePasswordModal ref="changePasswordRef" />
+      <ChangePasswordModal />
     </template>
   </BasicLayout>
 </template>

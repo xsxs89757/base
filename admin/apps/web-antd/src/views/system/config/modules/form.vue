@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { SystemConfigApi } from '#/api/system/config';
 
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
@@ -38,11 +38,7 @@ const [Drawer, drawerApi] = useVbenDrawer({
     if (isOpen) {
       const data = drawerApi.getData<SystemConfigApi.SystemConfig>();
       formApi.resetForm();
-      if (data && data.id) {
-        id.value = data.id;
-      } else {
-        id.value = undefined;
-      }
+      id.value = data && data.id ? data.id : undefined;
       await nextTick();
       if (data && data.id) {
         formApi.setValues(data);
@@ -51,14 +47,14 @@ const [Drawer, drawerApi] = useVbenDrawer({
   },
 });
 
-const getDrawerTitle = () => {
-  return id.value
-    ? $t('common.edit') + $t('system.config.name')
-    : $t('common.create') + $t('system.config.name');
-};
+const getDrawerTitle = computed(() =>
+  id.value
+    ? $t('ui.actionTitle.edit', [$t('system.config.name')])
+    : $t('ui.actionTitle.create', [$t('system.config.name')]),
+);
 </script>
 <template>
-  <Drawer :title="getDrawerTitle()">
+  <Drawer :title="getDrawerTitle">
     <Form />
   </Drawer>
 </template>

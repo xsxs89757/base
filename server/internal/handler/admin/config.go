@@ -19,15 +19,14 @@ import (
 // @Produce json
 // @Security BearerAuth
 // @Param page query int false "页码" default(1)
-// @Param pageSize query int false "每页数量" default(20)
+// @Param pageSize query int false "每页数量，最大 200" default(20)
 // @Param configKey query string false "配置键(模糊搜索)"
 // @Param configGroup query string false "配置分组"
 // @Param status query string false "状态: 0=禁用 1=启用"
 // @Success 200 {object} dto.Response{data=dto.PageData{items=[]admindto.ConfigItem}}
 // @Router /admin/system/config/list [get]
 func GetConfigList(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "20"))
+	page, pageSize := dto.ParsePage(c)
 	configKey := c.Query("configKey")
 	configGroup := c.Query("configGroup")
 	status := c.Query("status")
@@ -46,9 +45,13 @@ func GetConfigList(c *fiber.Ctx) error {
 		query = query.Where("status = ?", status)
 	}
 
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to get configs")
+	}
 	offset := (page - 1) * pageSize
-	query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&configs)
+	if err := query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&configs).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to get configs")
+	}
 
 	items := make([]admindto.ConfigItem, len(configs))
 	for i, cfg := range configs {
@@ -92,6 +95,7 @@ func GetConfigGroups(c *fiber.Ctx) error {
 // @Security BearerAuth
 // @Param request body admindto.ConfigRequest true "配置信息"
 // @Success 200 {object} dto.Response{data=dto.IDResponse}
+// @Failure 400 {object} dto.Response
 // @Router /admin/system/config [post]
 func CreateConfig(c *fiber.Ctx) error {
 	var req admindto.ConfigRequest
@@ -108,7 +112,10 @@ func CreateConfig(c *fiber.Ctx) error {
 		Status:      req.Status,
 	}
 	if err := store.DB.Create(&cfg).Error; err != nil {
-		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create config: "+err.Error())
+		if store.IsUniqueViolation(err) {
+			return dto.Fail(c, fiber.StatusBadRequest, "配置键已存在")
+		}
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create config")
 	}
 	return dto.Success(c, fiber.Map{"id": cfg.ID})
 }
@@ -122,12 +129,19 @@ func CreateConfig(c *fiber.Ctx) error {
 // @Param id path int true "配置ID"
 // @Param request body admindto.ConfigRequest true "配置信息"
 // @Success 200 {object} dto.Response
+// @Failure 400 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/config/{id} [put]
 func UpdateConfig(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
 	var req admindto.ConfigRequest
 	if err := validator.BindAndValidate(c, &req); err != nil {
 		return err
+	}
+
+	var existing adminmodel.Config
+	if err := store.DB.First(&existing, id).Error; err != nil {
+		return dto.Fail(c, fiber.StatusNotFound, "Config not found")
 	}
 
 	updates := map[string]any{
@@ -139,6 +153,9 @@ func UpdateConfig(c *fiber.Ctx) error {
 		"status":       req.Status,
 	}
 	if err := store.DB.Model(&adminmodel.Config{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		if store.IsUniqueViolation(err) {
+			return dto.Fail(c, fiber.StatusBadRequest, "配置键已存在")
+		}
 		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update config")
 	}
 	return dto.Success(c, nil)
@@ -146,16 +163,22 @@ func UpdateConfig(c *fiber.Ctx) error {
 
 // DeleteConfig 删除配置
 // @Summary 删除配置
+// @Description 物理删除，删除后同名配置键可再次创建
 // @Tags 系统管理 - 配置
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "配置ID"
 // @Success 200 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/config/{id} [delete]
 func DeleteConfig(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err := store.DB.Delete(&adminmodel.Config{}, id).Error; err != nil {
+	res := store.DB.Unscoped().Delete(&adminmodel.Config{}, id)
+	if res.Error != nil {
 		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to delete config")
+	}
+	if res.RowsAffected == 0 {
+		return dto.Fail(c, fiber.StatusNotFound, "Config not found")
 	}
 	return dto.Success(c, nil)
 }

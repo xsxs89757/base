@@ -1,3 +1,5 @@
+import type { Ref } from 'vue';
+
 import type { VbenFormSchema } from '#/adapter/form';
 import type { OnActionClickFn, VxeTableGridOptions } from '#/adapter/vxe-table';
 import type { SystemConfigApi } from '#/api/system/config';
@@ -47,7 +49,13 @@ export function useFormSchema(): VbenFormSchema[] {
   ];
 }
 
-export function useGridFormSchema(): VbenFormSchema[] {
+/**
+ * 列表搜索表单。分组下拉的选项来自 /system/config/groups，由列表页异步加载后通过 ref 传入，
+ * componentProps 用函数形式以便响应式读取最新选项。
+ */
+export function useGridFormSchema(
+  groupOptions: Ref<Array<{ label: string; value: string }>>,
+): VbenFormSchema[] {
   return [
     {
       component: 'Input',
@@ -55,7 +63,13 @@ export function useGridFormSchema(): VbenFormSchema[] {
       label: $t('system.config.configKey'),
     },
     {
-      component: 'Input',
+      component: 'Select',
+      componentProps: () => ({
+        allowClear: true,
+        options: groupOptions.value,
+        placeholder: $t('system.config.groupPlaceholder'),
+        showSearch: true,
+      }),
       fieldName: 'configGroup',
       label: $t('system.config.configGroup'),
     },

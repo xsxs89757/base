@@ -131,7 +131,7 @@ function refreshGrid() {
 <template>
   <Page auto-content-height>
     <FormModal @success="refreshGrid" />
-    <Grid table-title="部门列表">
+    <Grid :table-title="$t('system.dept.list')">
       <template #toolbar-tools>
         <Button
           v-access:code="'System:Dept:Create'"

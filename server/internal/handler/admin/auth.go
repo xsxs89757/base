@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"errors"
 	"time"
 
 	"base/config"
@@ -13,6 +14,7 @@ import (
 	"base/internal/validator"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 // Login 用户登录
@@ -76,6 +78,13 @@ func Login(c *fiber.Ctx) error {
 // @Success 200 {object} dto.Response
 // @Router /admin/auth/logout [post]
 func Logout(c *fiber.Ctx) error {
+	clearRefreshCookie(c)
+	return dto.Success(c, "")
+}
+
+// clearRefreshCookie 用与 Login 完全相同的属性覆盖删除。跨站部署时浏览器只接受
+// SameSite=None; Secure 的 Set-Cookie，缺了属性的删除指令会被直接丢弃，旧 cookie 一直留着。
+func clearRefreshCookie(c *fiber.Ctx) {
 	c.Cookie(&fiber.Cookie{
 		Name:     "jwt",
 		Value:    "",
@@ -84,7 +93,6 @@ func Logout(c *fiber.Ctx) error {
 		Secure:   true,
 		MaxAge:   -1,
 	})
-	return dto.Success(c, "")
 }
 
 // RefreshToken 刷新令牌
@@ -94,6 +102,7 @@ func Logout(c *fiber.Ctx) error {
 // @Produce plain
 // @Success 200 {string} string "新的 access token"
 // @Failure 403 {object} dto.Response
+// @Failure 500 {object} dto.Response
 // @Router /admin/auth/refresh [post]
 func RefreshToken(c *fiber.Ctx) error {
 	refreshToken := c.Cookies("jwt")
@@ -101,21 +110,28 @@ func RefreshToken(c *fiber.Ctx) error {
 		return dto.Fail(c, fiber.StatusForbidden, "Forbidden Exception")
 	}
 
-	claims, err := middleware.ParseToken(refreshToken)
+	// 只认 refresh 类型：access token 塞进 cookie 不能用来续签
+	claims, err := middleware.ParseToken(refreshToken, middleware.TokenTypeRefresh)
 	if err != nil {
-		c.Cookie(&fiber.Cookie{Name: "jwt", Value: "", MaxAge: -1})
+		clearRefreshCookie(c)
 		return dto.Fail(c, fiber.StatusForbidden, "Forbidden Exception")
 	}
 
-	user, err := adminsvc.GetUserByUsername(claims.Username)
-	if err != nil {
+	user, err := adminsvc.GetUserByID(claims.UserID)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		clearRefreshCookie(c)
 		return dto.Fail(c, fiber.StatusForbidden, "Forbidden Exception")
+	}
+	if err != nil {
+		// 数据库抖动不是鉴权失败：不动 cookie，让前端稍后重试
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to load user")
 	}
 
 	// 禁用（status=0）或已删除的管理员不得再用 refresh cookie 续签 access token，
 	// 否则后台"禁用账号"在 access token 过期前（最长可达数天）形同虚设。
-	if user.Status != 1 {
-		c.Cookie(&fiber.Cookie{Name: "jwt", Value: "", MaxAge: -1})
+	// 改密之前签发的 refresh token 同样作废，否则"改密即下线"会被续签绕过。
+	if user.Status != 1 || middleware.TokenRevokedByPasswordChange(claims.IssuedAt, user.PasswordChangedAt) {
+		clearRefreshCookie(c)
 		return dto.Fail(c, fiber.StatusForbidden, "Forbidden Exception")
 	}
 
@@ -130,7 +146,7 @@ func RefreshToken(c *fiber.Ctx) error {
 
 // ChangePassword 修改当前用户密码
 // @Summary 修改密码
-// @Description 用户修改自己的密码，需验证旧密码
+// @Description 用户修改自己的密码，需验证旧密码；成功后此前签发的 token 全部失效，需重新登录
 // @Tags 认证
 // @Accept json
 // @Produce json
@@ -159,6 +175,7 @@ func ChangePassword(c *fiber.Ctx) error {
 	if err := adminsvc.ChangePassword(userID, req.NewPassword); err != nil {
 		return dto.Fail(c, fiber.StatusInternalServerError, "修改密码失败")
 	}
+	middleware.InvalidateUserAuthCache(userID)
 
 	return dto.Success(c, nil)
 }
@@ -212,14 +229,11 @@ func GetUserInfo(c *fiber.Ctx) error {
 }
 
 func resolveAccessibleHomePath(user *adminmodel.User) string {
-	if user.ID == 1 {
+	if adminsvc.IsSuperUser(user) {
 		return user.HomePath
 	}
 
-	roleIDs := make([]uint, 0, len(user.Roles))
-	for _, role := range user.Roles {
-		roleIDs = append(roleIDs, role.ID)
-	}
+	roleIDs := adminsvc.ActiveRoleIDs(user)
 	if len(roleIDs) == 0 {
 		return user.HomePath
 	}
@@ -229,7 +243,7 @@ func resolveAccessibleHomePath(user *adminmodel.User) string {
 		store.DB.Model(&adminmodel.Menu{}).
 			Joins("JOIN role_menus ON role_menus.menu_id = sys_menus.id").
 			Joins("JOIN sys_roles ON sys_roles.id = role_menus.role_id").
-			Where("role_menus.role_id IN ? AND sys_roles.status = ? AND sys_roles.deleted_at IS NULL", roleIDs, 1).
+			Where("role_menus.role_id IN ? AND sys_roles.status = ?", roleIDs, 1).
 			Where("sys_menus.path = ? AND sys_menus.type IN ? AND sys_menus.status = ?", user.HomePath, []string{"menu", "embedded", "link"}, 1).
 			Count(&count)
 		if count > 0 {
@@ -241,7 +255,7 @@ func resolveAccessibleHomePath(user *adminmodel.User) string {
 	if err := store.DB.
 		Joins("JOIN role_menus ON role_menus.menu_id = sys_menus.id").
 		Joins("JOIN sys_roles ON sys_roles.id = role_menus.role_id").
-		Where("role_menus.role_id IN ? AND sys_roles.status = ? AND sys_roles.deleted_at IS NULL", roleIDs, 1).
+		Where("role_menus.role_id IN ? AND sys_roles.status = ?", roleIDs, 1).
 		Where("sys_menus.path <> '' AND sys_menus.type IN ? AND sys_menus.status = ?", []string{"menu", "embedded", "link"}, 1).
 		Order("sys_menus.order_no ASC, sys_menus.id ASC").
 		First(&menu).Error; err == nil {

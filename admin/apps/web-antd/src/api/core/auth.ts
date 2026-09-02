@@ -16,6 +16,19 @@ export namespace AuthApi {
     data: string;
     status: number;
   }
+
+  /** 修改当前用户密码参数 */
+  export interface ChangePasswordParams {
+    newPassword: string;
+    oldPassword: string;
+  }
+}
+
+/**
+ * 修改当前用户密码。成功后后端会让此前签发的 token 全部失效，调用方需引导重新登录。
+ */
+export async function changePasswordApi(data: AuthApi.ChangePasswordParams) {
+  return requestClient.post('/auth/change-password', data);
 }
 
 /**

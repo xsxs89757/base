@@ -1,6 +1,7 @@
 package store
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -56,6 +57,32 @@ func sqliteDSNWithDefaults(dsn string) string {
 	return dsn + sep + "_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)&_pragma=synchronous(NORMAL)"
 }
 
+// IsUniqueViolation 判断错误是否为唯一索引冲突，handler 据此返回 400 而不是 500。
+// 生产连接开了 TranslateError，四种驱动都会翻译成 gorm.ErrDuplicatedKey；
+// 子串匹配是给未开翻译的连接（如测试里直接 gorm.Open）兜底。
+func IsUniqueViolation(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, gorm.ErrDuplicatedKey) {
+		return true
+	}
+	msg := err.Error()
+	for _, needle := range []string{
+		"UNIQUE constraint failed", // sqlite
+		"Error 1062",               // mysql
+		"Duplicate entry",          // mysql
+		"23505",                    // postgres
+		"duplicate key value violates unique constraint", // postgres
+		"Cannot insert duplicate key",                    // sqlserver
+	} {
+		if strings.Contains(msg, needle) {
+			return true
+		}
+	}
+	return false
+}
+
 func Init() {
 	cfg := config.C.Database
 
@@ -65,7 +92,8 @@ func Init() {
 	}
 
 	DB, err = gorm.Open(dial, &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Warn),
+		Logger:         logger.Default.LogMode(logger.Warn),
+		TranslateError: true, // 唯一冲突等驱动错误统一翻译成 gorm.ErrDuplicatedKey 等
 	})
 	if err != nil {
 		log.Fatalf("failed to connect database: %v", err)
@@ -97,8 +125,52 @@ func Init() {
 		log.Fatalf("failed to migrate database: %v", err)
 	}
 
+	purgeLegacySoftDeleted()
 	seed()
 	projectSeed()
+}
+
+// purgeLegacySoftDeleted 物理清理角色/用户/配置表里历史遗留的软删除行。
+// 这三张表现在都是物理删除（见 DeleteRole / DeleteUser / DeleteConfig）：它们的
+// name/code/username/config_key 带唯一索引，软删行会一直占着键值，导致删过的角色
+// 再也建不出同 code 的。老库升级时把残留行连同关联表一起清掉。
+func purgeLegacySoftDeleted() {
+	type target struct {
+		model  any
+		label  string
+		before func(ids []uint)
+	}
+	targets := []target{
+		{model: &adminmodel.Role{}, label: "sys_roles", before: func(ids []uint) {
+			DB.Where("role_id IN ?", ids).Delete(&adminmodel.RoleMenu{})
+			DB.Where("role_id IN ?", ids).Delete(&adminmodel.UserRole{})
+		}},
+		{model: &adminmodel.User{}, label: "sys_users", before: func(ids []uint) {
+			DB.Where("user_id IN ?", ids).Delete(&adminmodel.UserRole{})
+		}},
+		{model: &adminmodel.Config{}, label: "sys_configs"},
+	}
+	for _, t := range targets {
+		if !DB.Migrator().HasColumn(t.model, "DeletedAt") {
+			continue
+		}
+		var ids []uint
+		if err := DB.Model(t.model).Unscoped().Where("deleted_at IS NOT NULL").Pluck("id", &ids).Error; err != nil {
+			log.Printf("  [migrate] scan soft-deleted %s failed: %v", t.label, err)
+			continue
+		}
+		if len(ids) == 0 {
+			continue
+		}
+		if t.before != nil {
+			t.before(ids)
+		}
+		if err := DB.Unscoped().Where("id IN ?", ids).Delete(t.model).Error; err != nil {
+			log.Printf("  [migrate] purge soft-deleted %s failed: %v", t.label, err)
+			continue
+		}
+		log.Printf("  [migrate] purged %d soft-deleted rows from %s", len(ids), t.label)
+	}
 }
 
 // ---------------------------------------------------------------------------
@@ -140,11 +212,19 @@ type menuDef struct {
 	Buttons    []adminmodel.Menu
 }
 
+// legacySeedMenus 是基底早期版本种下、现已移除的 vben 演示菜单，升级时连同角色关联一起清掉。
+// 按 name + component 精确匹配：下游完全可能自己建一个叫 Analytics 的业务页，不能只看名字。
+var legacySeedMenus = []adminmodel.Menu{
+	{Name: "Analytics", Component: "/dashboard/analytics/index"},
+	{Name: "About", Component: "_core/about/index"},
+}
+
 func seedMenus() {
+	removeLegacySeedMenus(legacySeedMenus)
+
 	defs := []menuDef{
 		{Menu: adminmodel.Menu{Name: "Dashboard", Path: "/dashboard", Type: "catalog", Icon: "lucide:layout-dashboard", Title: "page.dashboard.title", OrderNo: -1, Status: 1}},
-		{Menu: adminmodel.Menu{Name: "Analytics", Path: "/analytics", Component: "/dashboard/analytics/index", Type: "menu", Icon: "lucide:area-chart", Title: "page.dashboard.analytics", OrderNo: 1, Status: 1, AffixTab: true}, ParentName: "Dashboard"},
-		{Menu: adminmodel.Menu{Name: "Workspace", Path: "/workspace", Component: "/dashboard/workspace/index", Type: "menu", Icon: "carbon:workspace", Title: "page.dashboard.workspace", OrderNo: 2, Status: 1}, ParentName: "Dashboard"},
+		{Menu: adminmodel.Menu{Name: "Workspace", Path: "/workspace", Component: "/dashboard/workspace/index", Type: "menu", Icon: "carbon:workspace", Title: "page.dashboard.workspace", OrderNo: 1, Status: 1, AffixTab: true}, ParentName: "Dashboard"},
 		{Menu: adminmodel.Menu{Name: "System", Path: "/system", Type: "catalog", Icon: "carbon:settings", Title: "system.title", OrderNo: 9997, Status: 1}},
 		{
 			Menu:       adminmodel.Menu{Name: "SystemUser", Path: "/system/user", Component: "/system/user/list", Type: "menu", Icon: "mdi:account-outline", Title: "system.user.title", OrderNo: 1, Status: 1, AuthCode: "System:User:List"},
@@ -198,7 +278,6 @@ func seedMenus() {
 				{Name: "SystemOperationLogDelete", Type: "button", Title: "common.delete", AuthCode: "System:OperationLog:Delete", Status: 1},
 			},
 		},
-		{Menu: adminmodel.Menu{Name: "About", Path: "/about", Component: "_core/about/index", Type: "menu", Icon: "lucide:copyright", Title: "demos.vben.about", OrderNo: 9999, Status: 1}},
 	}
 
 	newMenuCreated := false
@@ -222,6 +301,35 @@ func seedMenus() {
 	if newMenuCreated {
 		refreshRoleMenus()
 	}
+}
+
+// removeLegacySeedMenus 按 name + component 物理删除已废弃的种子菜单及其 role_menus 关联。
+// 这些菜单没有子节点；不走 syncSeedMenu，因为它只会新增/更新、不会删除。
+func removeLegacySeedMenus(defs []adminmodel.Menu) {
+	var ids []uint
+	var names []string
+	for _, d := range defs {
+		var found []uint
+		if err := DB.Model(&adminmodel.Menu{}).Unscoped().
+			Where("name = ? AND component = ?", d.Name, d.Component).
+			Pluck("id", &found).Error; err != nil {
+			log.Printf("  [seed] scan legacy menu %s failed: %v", d.Name, err)
+			continue
+		}
+		if len(found) > 0 {
+			ids = append(ids, found...)
+			names = append(names, d.Name)
+		}
+	}
+	if len(ids) == 0 {
+		return
+	}
+	DB.Where("menu_id IN ?", ids).Delete(&adminmodel.RoleMenu{})
+	if err := DB.Unscoped().Where("id IN ?", ids).Delete(&adminmodel.Menu{}).Error; err != nil {
+		log.Printf("  [seed] remove legacy menus failed: %v", err)
+		return
+	}
+	log.Printf("  [seed] legacy menus removed: %s", strings.Join(names, ", "))
 }
 
 func refreshRoleMenus() {
@@ -279,6 +387,8 @@ func syncSeedMenu(menu adminmodel.Menu, parentName string) (adminmodel.Menu, boo
 
 // --- Users ---
 
+const defaultSeedPassword = "123456"
+
 func seedUsers() {
 	renameLegacyRootUser()
 
@@ -290,7 +400,11 @@ func seedUsers() {
 	}{
 		{"super", "Super", "super", ""},
 		{"admin", "Admin", "admin", "/workspace"},
-		{"jack", "Jack", "user", "/analytics"},
+		{"jack", "Jack", "user", "/workspace"},
+	}
+	// 生产库只种内置超管：admin/jack 是演示账号，密码人尽皆知，不该出现在线上
+	if config.IsProduction() {
+		userDefs = userDefs[:1]
 	}
 
 	for _, u := range userDefs {
@@ -298,9 +412,12 @@ func seedUsers() {
 		if DB.Where("username = ?", u.Username).First(&exists).Error == nil {
 			continue
 		}
-		hash, _ := bcrypt.GenerateFromPassword([]byte("123456"), bcrypt.DefaultCost)
+		hash, _ := bcrypt.GenerateFromPassword([]byte(defaultSeedPassword), bcrypt.DefaultCost)
 		var role adminmodel.Role
-		DB.Where("code = ?", u.RoleCode).First(&role)
+		if DB.Where("code = ?", u.RoleCode).First(&role).Error != nil {
+			log.Printf("  [seed] skip user %s: role %s not found", u.Username, u.RoleCode)
+			continue
+		}
 		user := adminmodel.User{
 			Username: u.Username,
 			Password: string(hash),
@@ -311,6 +428,23 @@ func seedUsers() {
 		}
 		DB.Create(&user)
 		log.Printf("  [seed] user created: %s", u.Username)
+	}
+
+	// 早期种子把 jack 的首页指向已删除的 /analytics，统一迁到 /workspace
+	DB.Model(&adminmodel.User{}).Where("home_path = ?", "/analytics").Update("home_path", "/workspace")
+
+	warnDefaultSuperPassword()
+}
+
+// warnDefaultSuperPassword 每次启动检查内置超管是否还在用种子密码，命中则打 WARN。
+// 一次 bcrypt 比对的成本可以忽略；这是生产库最常见的失守点。
+func warnDefaultSuperPassword() {
+	var super adminmodel.User
+	if DB.Select("id", "password").Where("username = ?", "super").First(&super).Error != nil {
+		return
+	}
+	if bcrypt.CompareHashAndPassword([]byte(super.Password), []byte(defaultSeedPassword)) == nil {
+		log.Printf("  [seed] WARN: user 'super' still uses the default password %s, change it before exposing this service", defaultSeedPassword)
 	}
 }
 

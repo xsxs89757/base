@@ -5,8 +5,6 @@ go 1.24.0
 toolchain go1.24.5
 
 require (
-	github.com/casbin/casbin/v3 v3.8.1
-	github.com/casbin/gorm-adapter/v3 v3.41.0
 	github.com/glebarez/sqlite v1.11.0
 	github.com/go-playground/validator/v10 v10.30.1
 	github.com/gofiber/fiber/v2 v2.52.6
@@ -27,8 +25,6 @@ require (
 	github.com/PuerkitoBio/purell v1.1.1 // indirect
 	github.com/PuerkitoBio/urlesc v0.0.0-20170810143723-de5bf2ad4578 // indirect
 	github.com/andybalholm/brotli v1.1.0 // indirect
-	github.com/bmatcuk/doublestar/v4 v4.9.1 // indirect
-	github.com/casbin/govaluate v1.10.0 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/gabriel-vasile/mimetype v1.4.12 // indirect
 	github.com/glebarez/go-sqlite v1.22.0 // indirect
@@ -57,7 +53,6 @@ require (
 	github.com/mattn/go-runewidth v0.0.16 // indirect
 	github.com/microsoft/go-mssqldb v1.9.5 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect
-	github.com/pkg/errors v0.9.1 // indirect
 	github.com/remyoudompheng/bigfft v0.0.0-20230129092748-24d4a6f8daec // indirect
 	github.com/rivo/uniseg v0.2.0 // indirect
 	github.com/shopspring/decimal v1.4.0 // indirect
@@ -73,7 +68,6 @@ require (
 	golang.org/x/text v0.32.0 // indirect
 	golang.org/x/tools v0.40.0 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	gorm.io/plugin/dbresolver v1.6.2 // indirect
 	modernc.org/libc v1.67.4 // indirect
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect

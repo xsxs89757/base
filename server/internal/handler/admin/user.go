@@ -1,15 +1,18 @@
 package admin
 
 import (
+	"errors"
 	"strconv"
 
 	"base/internal/dto"
 	admindto "base/internal/dto/admin"
 	"base/internal/middleware"
 	adminsvc "base/internal/service/admin"
+	"base/internal/store"
 	"base/internal/validator"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 // GetUserList 获取用户列表
@@ -19,15 +22,14 @@ import (
 // @Produce json
 // @Security BearerAuth
 // @Param page query int false "页码" default(1)
-// @Param pageSize query int false "每页数量" default(20)
+// @Param pageSize query int false "每页数量，最大 200" default(20)
 // @Param username query string false "用户名(模糊搜索)"
 // @Param status query int false "状态: 0=禁用 1=启用"
 // @Success 200 {object} dto.Response{data=dto.PageData{items=[]admindto.UserItem}}
 // @Failure 401 {object} dto.Response
 // @Router /admin/system/user/list [get]
 func GetUserList(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "20"))
+	page, pageSize := dto.ParsePage(c)
 
 	params := adminsvc.UserListParams{
 		Page:     page,
@@ -78,6 +80,7 @@ func GetUserList(c *fiber.Ctx) error {
 // @Param request body admindto.CreateUserRequest true "用户信息"
 // @Success 200 {object} dto.Response{data=dto.IDResponse}
 // @Failure 400 {object} dto.Response
+// @Failure 403 {object} dto.Response
 // @Router /admin/system/user [post]
 func CreateUser(c *fiber.Ctx) error {
 	var req admindto.CreateUserRequest
@@ -91,14 +94,38 @@ func CreateUser(c *fiber.Ctx) error {
 
 	user := adminsvc.NewUser(req.Username, req.Password, req.RealName, req.Email, req.Phone, req.Status, req.Remark)
 	if err := adminsvc.CreateUser(user, req.RoleIDs); err != nil {
-		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create user: "+err.Error())
+		if store.IsUniqueViolation(err) {
+			return dto.Fail(c, fiber.StatusBadRequest, "用户名已存在")
+		}
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create user")
 	}
 	return dto.Success(c, fiber.Map{"id": user.ID})
 }
 
+// mayMutateUser 普通管理员不得修改/删除持有 super 角色的用户：
+// 否则可以给对方重置密码后登录，或剥掉其 super 角色，等于绕过了"不能分配 super"的防线。
+func mayMutateUser(c *fiber.Ctx, targetID uint) bool {
+	return !adminsvc.UserHasSuperRole(targetID) || middleware.OperatorIsSuper(c)
+}
+
+const msgSuperHolderProtected = "无权修改超级管理员"
+
+func failUserMutation(c *fiber.Ctx, err error, fallback string) error {
+	switch {
+	case errors.Is(err, adminsvc.ErrSuperAdminProtected):
+		return dto.Fail(c, fiber.StatusForbidden, err.Error())
+	case errors.Is(err, gorm.ErrRecordNotFound):
+		return dto.Fail(c, fiber.StatusNotFound, "User not found")
+	case store.IsUniqueViolation(err):
+		return dto.Fail(c, fiber.StatusBadRequest, "用户名已存在")
+	default:
+		return dto.Fail(c, fiber.StatusInternalServerError, fallback)
+	}
+}
+
 // UpdateUser 更新用户
 // @Summary 更新用户
-// @Description 更新用户信息和角色分配
+// @Description 更新用户信息和角色分配；重置密码会让该用户已签发的 token 全部失效
 // @Tags 系统管理 - 用户
 // @Accept json
 // @Produce json
@@ -107,6 +134,8 @@ func CreateUser(c *fiber.Ctx) error {
 // @Param request body admindto.UpdateUserRequest true "用户信息"
 // @Success 200 {object} dto.Response
 // @Failure 400 {object} dto.Response
+// @Failure 403 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/user/{id} [put]
 func UpdateUser(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
@@ -118,6 +147,9 @@ func UpdateUser(c *fiber.Ctx) error {
 
 	if adminsvc.RolesIncludeSuperCode(req.RoleIDs) && !middleware.OperatorIsSuper(c) {
 		return dto.Fail(c, fiber.StatusForbidden, "无权分配超级管理员角色")
+	}
+	if !mayMutateUser(c, uint(id)) {
+		return dto.Fail(c, fiber.StatusForbidden, msgSuperHolderProtected)
 	}
 
 	updates := map[string]any{
@@ -132,24 +164,32 @@ func UpdateUser(c *fiber.Ctx) error {
 	}
 
 	if err := adminsvc.UpdateUser(uint(id), updates, req.RoleIDs); err != nil {
-		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update user")
+		return failUserMutation(c, err, "Failed to update user")
 	}
+	// 状态/角色/口令变更即时生效，不等缓存 TTL
+	middleware.InvalidateUserAuthCache(uint(id))
 	return dto.Success(c, nil)
 }
 
 // DeleteUser 删除用户
 // @Summary 删除用户
-// @Description 删除指定用户
+// @Description 物理删除指定用户及其角色关联，删除后同名用户可再次创建
 // @Tags 系统管理 - 用户
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "用户ID"
 // @Success 200 {object} dto.Response
+// @Failure 403 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/user/{id} [delete]
 func DeleteUser(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
-	if err := adminsvc.DeleteUser(uint(id)); err != nil {
-		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to delete user")
+	if !mayMutateUser(c, uint(id)) {
+		return dto.Fail(c, fiber.StatusForbidden, msgSuperHolderProtected)
 	}
+	if err := adminsvc.DeleteUser(uint(id)); err != nil {
+		return failUserMutation(c, err, "Failed to delete user")
+	}
+	middleware.InvalidateUserAuthCache(uint(id))
 	return dto.Success(c, nil)
 }

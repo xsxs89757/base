@@ -1,6 +1,19 @@
 {
   "title": "System Management",
+  "common": {
+    "appendChild": "Add Child",
+    "toggleStatusTitle": "Toggle Status",
+    "toggleStatusConfirm": "Change the status of {0} to [{1}]?",
+    "leaveBlankToKeep": "Leave blank to keep unchanged"
+  },
+  "password": {
+    "oldPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm Password",
+    "changeSuccess": "Password changed, please sign in again"
+  },
   "dept": {
+    "list": "Department List",
     "name": "Department",
     "title": "Department Management",
     "deptName": "Department Name",
@@ -11,6 +24,7 @@
     "parentDept": "Parent Department"
   },
   "menu": {
+    "list": "Menu List",
     "title": "Menu Management",
     "parent": "Parent Menu",
     "menuTitle": "Title",
@@ -74,6 +88,7 @@
     "configKey": "Key",
     "configValue": "Config Value",
     "configGroup": "Group",
+    "groupPlaceholder": "Select group",
     "status": "Status",
     "remark": "Remark",
     "createTime": "Created At",
@@ -90,6 +105,7 @@
     "phone": "Phone",
     "status": "Status",
     "roles": "Roles",
+    "rolePlaceholder": "Select roles",
     "remark": "Remark",
     "createTime": "Created At",
     "operation": "Operation"
@@ -106,6 +122,9 @@
     "ip": "IP",
     "createTime": "Time",
     "operation": "Operation",
-    "clear": "Clear Logs"
+    "clear": "Clear Logs",
+    "clearTitle": "Clear Operation Logs",
+    "clearConfirm": "Clear all operation logs? This cannot be undone.",
+    "clearSuccess": "Operation logs cleared"
   }
 }

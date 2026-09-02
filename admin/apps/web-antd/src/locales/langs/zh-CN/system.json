@@ -1,5 +1,17 @@
 {
   "title": "系统管理",
+  "common": {
+    "appendChild": "新增下级",
+    "toggleStatusTitle": "切换状态",
+    "toggleStatusConfirm": "确定要将 {0} 的状态切换为【{1}】吗？",
+    "leaveBlankToKeep": "留空则不修改"
+  },
+  "password": {
+    "oldPassword": "旧密码",
+    "newPassword": "新密码",
+    "confirmPassword": "确认密码",
+    "changeSuccess": "密码修改成功，请重新登录"
+  },
   "dept": {
     "list": "部门列表",
     "createTime": "创建时间",
@@ -76,6 +88,7 @@
     "configKey": "键名",
     "configValue": "配置值",
     "configGroup": "配置分组",
+    "groupPlaceholder": "请选择分组",
     "status": "状态",
     "remark": "备注",
     "createTime": "创建时间",
@@ -92,6 +105,7 @@
     "phone": "手机号",
     "status": "状态",
     "roles": "角色",
+    "rolePlaceholder": "请选择角色",
     "remark": "备注",
     "createTime": "创建时间",
     "operation": "操作"
@@ -108,6 +122,9 @@
     "ip": "IP地址",
     "createTime": "操作时间",
     "operation": "操作",
-    "clear": "清空日志"
+    "clear": "清空日志",
+    "clearTitle": "清空操作日志",
+    "clearConfirm": "确定要清空所有操作日志吗？此操作不可恢复。",
+    "clearSuccess": "操作日志已清空"
   }
 }

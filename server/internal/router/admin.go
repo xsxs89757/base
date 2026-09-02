@@ -17,8 +17,8 @@ func SetupAdmin(app *fiber.App) {
 	auth.Post("/logout", admin.Logout)
 	auth.Post("/refresh", admin.RefreshToken)
 
-	// Protected routes
-	protected := g.Group("", middleware.JWTAuth(), middleware.CasbinAuth())
+	// Protected routes: JWTAuth 装配用户/角色，PermissionAuth 按 middleware/permission.go 的路由表校验权限码
+	protected := g.Group("", middleware.JWTAuth(), middleware.PermissionAuth())
 
 	// Operation log middleware (records POST/PUT/DELETE)
 	protected.Use(middleware.OperationLog())

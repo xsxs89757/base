@@ -6,7 +6,7 @@
 
 这是一个后台管理系统：
 
-- 后端：`server/`，Go Fiber v2 + GORM + Casbin v3 + JWT + Swagger/OpenAPI。
+- 后端：`server/`，Go Fiber v2 + GORM + JWT + Swagger/OpenAPI；权限为菜单权限码 RBAC（`internal/middleware/permission.go`）。
 - 前端：`admin/`，Vben Admin v5 + Vue 3 + TypeScript + Ant Design Vue + Vite + Pinia + Tailwind CSS。
 - 前端应用主路径：`admin/apps/web-antd/src/`。
 - 后端管理接口前缀：`/admin`。
@@ -55,7 +55,7 @@ git push -u origin main
 
 **四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突：
 
-- `server/internal/router/project.go`：注册下游业务路由。
+- `server/internal/router/project.go`：注册下游业务路由；需要权限码的路由用 `middleware.RegisterRoutePermissions` 登记（示例见 `middleware/permission.go` 中该函数的注释与 README「权限说明」），只需登录的用 `RegisterAuthenticatedRoutes`。
 - `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
 - `dev.project.sh`（仓库根，可选）：`./dev.sh` 自动加载，挂载额外本地开发服务。实现 `project_dev_start` / `project_dev_stop` / `project_dev_info` 三个函数，端口用脚本提供的 `resolve_port` 解析（自动处理占用与 `--force`）。
 - `deploy.project.sh`（仓库根，可选）：`./deploy.sh` 自动加载，挂载额外部署目标。声明 `PROJECT_DEPLOY_TARGETS="xxx ..."` 并实现 `project_deploy_<目标>` 函数；扩展目标可单独部署（`./deploy.sh <目标>`），`all` 模式在 server/admin 之后一并执行，可复用 `ssh_run` / `scp_to` / `ensure_systemd_unit` / `restart_remote_service` 等助手。
@@ -66,7 +66,7 @@ git push -u origin main
 
 1. **本地开发**：仓库根新增 `dev.project.sh`，实现三个函数。dev.sh 会 source 它并在合适时机调用，其中这些助手可以直接用：
    - `resolve_port <端口> <名称>`：解析端口，结果在 `RESOLVED_PORT`（自动处理占用、`--force`、与本次已分配端口去重）。**必须用它**，不要自己写死端口，否则同机多项目会互相抢。
-   - `chuanyun_up <隧道名> <端口>`：建公网隧道，地址在 `CHUANYUN_LAST_URL`（穿云没开就是空字符串）。隧道名用 `$(chuanyun_slug)-xxx` 保证按项目区分；dev.sh 退出时统一注销，无需自己清理。
+   - `chuanyun_up <隧道名> <端口>`：建公网隧道，地址在 `CHUANYUN_LAST_URL`（穿云没开就是空字符串）。隧道名用 `$(chuanyun_slug)-xxx` 保证按项目区分；dev.sh 退出时统一关掉（不删，用户设的口令保留），无需自己清理。
    - `kill_tree <PID>`：在 `project_dev_stop` 里结束自己启动的进程树（pnpm/nuxt 都是多层包装，`kill` 单个 PID 杀不干净）。
    - 现成变量：`ROOT_DIR`、`SERVER_PORT`（已解析）、`RED/GREEN/YELLOW/CYAN/NC` 配色。
 2. **部署**：仓库根新增 `deploy.project.sh`，声明 `PROJECT_DEPLOY_TARGETS="web"` 并实现 `project_deploy_web`，可复用 `ssh_run` / `scp_to` / `check_remote_owner` / `ensure_systemd_unit` / `restart_remote_service`。
@@ -75,7 +75,7 @@ git push -u origin main
 
 完整可抄的 `dev.project.sh` 示例见 README「新增额外服务」一节。
 
-**穿云隧道的两种写法别混用**：端口由 dev.sh 动态解析的服务（后端、admin、`dev.project.sh` 里启动的），一律在脚本里用 `chuanyun_up` 现取现用；只有 dev.sh **不启动**的固定端口服务才写进 `chuanyun.toml` 的 `[[tunnels]]`（该文件里的 port 按原样使用，不做端口避让）。`[[connects]]` 用来把同事已开的隧道接到本机端口，`local_port` 同样按原样占用；dev.sh 会在解析自身端口之前先建立 connect，因此后续端口分配会自动避开它。隧道名一律带 `project` 前缀——公网地址不含项目信息，不加前缀跨项目必撞名。
+**穿云隧道的两种写法别混用**：端口由 dev.sh 动态解析的服务（后端、admin、`dev.project.sh` 里启动的），一律在脚本里用 `chuanyun_up` 现取现用；只有 dev.sh **不启动**的固定端口服务才写进 `chuanyun.toml` 的 `[[tunnels]]`（该文件里的 port 按原样使用，不做端口避让）。`[[connects]]` 用来把同事已开的隧道接到本机端口，`local_port` 同样按原样占用；对方隧道的口令写 `chuanyun.local.toml`（gitignore），不写进 `chuanyun.toml`；dev.sh 会在解析自身端口之前先建立 connect，因此后续端口分配会自动避开它。隧道名一律带 `project` 前缀——公网地址不含项目信息，不加前缀跨项目必撞名。
 
 同步基底：`make sync-base`（等价 `git fetch base && git merge base/main`）。解决冲突原则：下游没改过的基底文件取基底版本；下游改过的文件（脚本/文档/业务代码）人工合并——保留下游定制、吸收基底修复；拿不准某文件归属时用 `git log base/main -- <文件>` 查它是否来自基底。
 
@@ -104,7 +104,7 @@ git push -u origin main
 公共层：
 
 - `server/internal/dto/base.go` 提供统一响应：`dto.Success`、`dto.PageSuccess`、`dto.Fail`。
-- `server/internal/middleware/` 放 JWT、Casbin、操作日志等中间件。
+- `server/internal/middleware/` 放 JWT、权限码（`PermissionAuth`）、操作日志等中间件。`JWTAuth` 每个请求以数据库为准核对用户状态与启用角色（进程内缓存 1 分钟），改用户/角色/密码的 handler 必须调 `middleware.InvalidateUserAuthCache`；角色/菜单变更调 `InvalidatePermissionCache`。
 - `server/internal/store/` 放数据库和共享存储初始化。
 
 ### API 和响应
@@ -112,8 +112,8 @@ git push -u origin main
 - Handler 返回统一响应格式，不直接拼零散 JSON。
 - 列表接口使用分页结构：`items` + `total`。
 - 管理端业务接口放在 `/admin` 前缀下；公共前台 API 才放 `/api`。
-- 新增、修改、删除管理端接口必须确认 JWT、Casbin 和操作日志是否应该覆盖。
-- id=1 的用户是超级管理员：不受普通权限限制，不出现在普通用户列表，不允许被修改或删除。
+- 新增、修改、删除管理端接口必须确认 JWT、权限码（在 `middleware/permission.go` 的路由表登记，未登记的 `/admin` 路由对非 super 一律 403）和操作日志是否应该覆盖。
+- id=1 的用户是超级管理员：不受普通权限限制，不出现在普通用户列表，不允许被修改或删除。持有 `super` 角色的用户同样受保护：非 super 操作者不得修改/删除，也不能把 super 角色分配出去。
 
 ### Swagger
 
@@ -150,6 +150,7 @@ swag init -g main.go -o docs --parseDependency --parseInternal
 - `map[string]any` 做 `Updates` 时，key 必须是数据库列名，也就是 snake_case，不是 Go 字段名。
 - 同一字段禁止同时写 `uniqueIndex` 和 `index`（如 `gorm:"uniqueIndex;index"`）：两个未命名标签会生成同名默认索引，同一列被并入一个索引两次，MySQL AutoMigrate 报 `1060 Duplicate column name`；本地 SQLite 不报错，这类问题只在 MySQL 上暴露。`uniqueIndex` 本身就是索引，不要再叠加 `index`。
 - 涉及索引/建表的模型改动，上线前用 MySQL 完整启动验证一次，不要只依赖本地 SQLite。
+- 角色、用户、配置是物理删除（`Unscoped`，删除时同步清理 `role_menus` / `user_roles`），因为它们的 name/code/username/config_key 带唯一索引，软删行会永久占住键值；菜单、部门保持软删除，删除必须递归处理下级并清理 `role_menus`。列表接口统一用 `dto.ParsePage` 解析分页（pageSize 上限 200），唯一冲突用 `store.IsUniqueViolation` 判断后返回 400。
 - SQLite 的 `data.db-wal` / `data.db-shm` 伴生文件**绝不能提交**（`.gitignore` 已用 `server/data.db*` 覆盖）：主库被忽略而 WAL 入库时，fresh clone 只有陈旧 WAL 没有主库，启动直接报 `malformed database schema ... no such table`。下游若发现这两个文件已被跟踪，用 `git rm --cached server/data.db-shm server/data.db-wal` 移除。
 - 改 model 字段后需要完整重启后端，让 AutoMigrate 重新执行；只看前端热更新不够。
 - 复杂写操作使用事务，查询注意预加载和索引，避免 N+1。

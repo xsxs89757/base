@@ -2,6 +2,8 @@ package admin
 
 import (
 	"strconv"
+	"strings"
+	"time"
 
 	"base/internal/dto"
 	admindto "base/internal/dto/admin"
@@ -11,6 +13,7 @@ import (
 	"base/internal/validator"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 // GetRoleMenuTree 获取角色授权用的完整菜单树
@@ -53,22 +56,47 @@ func GetAllRoles(c *fiber.Ctx) error {
 	return dto.Success(c, items)
 }
 
+// timeBound 解析列表筛选用的时间字符串。前端 RangePicker 经 fieldMappingTime 默认送
+// YYYY-MM-DD，也接受 YYYY-MM-DD HH:mm:ss。exclusiveEnd 为 true 时返回开区间上界：
+// 日期 → 次日 0 点，日期时间 → +1 秒。解析失败视为未传。
+func timeBound(s string, exclusiveEnd bool) (time.Time, bool) {
+	s = strings.TrimSpace(s)
+	if s == "" {
+		return time.Time{}, false
+	}
+	if t, err := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local); err == nil {
+		if exclusiveEnd {
+			t = t.Add(time.Second)
+		}
+		return t, true
+	}
+	if t, err := time.ParseInLocation("2006-01-02", s, time.Local); err == nil {
+		if exclusiveEnd {
+			t = t.AddDate(0, 0, 1)
+		}
+		return t, true
+	}
+	return time.Time{}, false
+}
+
 // GetRoleList 获取角色列表
 // @Summary 获取角色列表
-// @Description 分页查询角色列表，支持按名称和状态筛选
+// @Description 分页查询角色列表，支持按名称、编码、状态和创建时间筛选
 // @Tags 系统管理 - 角色
 // @Produce json
 // @Security BearerAuth
 // @Param page query int false "页码" default(1)
-// @Param pageSize query int false "每页数量" default(20)
+// @Param pageSize query int false "每页数量，最大 200" default(20)
 // @Param name query string false "角色名(模糊搜索)"
+// @Param code query string false "角色编码(模糊搜索)"
 // @Param status query string false "状态: 0=禁用 1=启用"
+// @Param startTime query string false "创建时间起（含），YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss"
+// @Param endTime query string false "创建时间止（含），YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss"
 // @Success 200 {object} dto.Response{data=dto.PageData{items=[]admindto.RoleItem}}
 // @Failure 401 {object} dto.Response
 // @Router /admin/system/role/list [get]
 func GetRoleList(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "20"))
+	page, pageSize := dto.ParsePage(c)
 	name := c.Query("name")
 	code := c.Query("code")
 	status := c.Query("status")
@@ -86,10 +114,20 @@ func GetRoleList(c *fiber.Ctx) error {
 	if status == "0" || status == "1" {
 		query = query.Where("status = ?", status)
 	}
+	if t, ok := timeBound(c.Query("startTime"), false); ok {
+		query = query.Where("created_at >= ?", t)
+	}
+	if t, ok := timeBound(c.Query("endTime"), true); ok {
+		query = query.Where("created_at < ?", t)
+	}
 
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to get roles")
+	}
 	offset := (page - 1) * pageSize
-	query.Preload("Menus").Offset(offset).Limit(pageSize).Find(&roles)
+	if err := query.Preload("Menus").Order("id").Offset(offset).Limit(pageSize).Find(&roles).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to get roles")
+	}
 
 	items := make([]admindto.RoleItem, len(roles))
 	for i, r := range roles {
@@ -128,7 +166,7 @@ func CreateRole(c *fiber.Ctx) error {
 		return err
 	}
 
-	// code=super 是权限体系里的最高特权标识（CasbinAuth 见到该角色码直接全量放行），
+	// code=super 是权限体系里的最高特权标识（PermissionAuth 见到该角色码直接全量放行），
 	// 属系统保留字：只允许由种子数据创建，禁止通过接口新建，否则等于开放"自助提权"入口。
 	if req.Code == "super" {
 		return dto.Fail(c, fiber.StatusBadRequest, "角色 code \"super\" 为系统保留，不可创建")
@@ -141,14 +179,19 @@ func CreateRole(c *fiber.Ctx) error {
 		Remark: req.Remark,
 	}
 	if err := store.DB.Create(&role).Error; err != nil {
-		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create role: "+err.Error())
+		if store.IsUniqueViolation(err) {
+			return dto.Fail(c, fiber.StatusBadRequest, "角色名称或编码已存在")
+		}
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create role")
 	}
 
 	menuIDs := req.GrantedMenuIDs()
 	if len(menuIDs) > 0 {
 		var menus []adminmodel.Menu
 		store.DB.Where("id IN ?", menuIDs).Find(&menus)
-		store.DB.Model(&role).Association("Menus").Replace(menus)
+		if err := store.DB.Model(&role).Association("Menus").Replace(menus); err != nil {
+			return dto.Fail(c, fiber.StatusInternalServerError, "Failed to grant menus")
+		}
 	}
 
 	middleware.InvalidatePermissionCache()
@@ -166,6 +209,7 @@ func CreateRole(c *fiber.Ctx) error {
 // @Param request body admindto.CreateRoleRequest true "角色信息"
 // @Success 200 {object} dto.Response
 // @Failure 400 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/role/{id} [put]
 func UpdateRole(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
@@ -196,32 +240,51 @@ func UpdateRole(c *fiber.Ctx) error {
 		"status": req.Status,
 		"remark": req.Remark,
 	}
-	store.DB.Model(&adminmodel.Role{}).Where("id = ?", id).Updates(updates)
+	if err := store.DB.Model(&adminmodel.Role{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		if store.IsUniqueViolation(err) {
+			return dto.Fail(c, fiber.StatusBadRequest, "角色名称或编码已存在")
+		}
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update role")
+	}
 
 	// 仅当请求显式带上 menuIds/permissions 字段时才更新菜单关联。
 	// 字段缺失（指针 nil）时保持原有关联不变，避免"仅改状态/备注"等场景误清空权限。
 	if req.HasGrantedMenuIDs() {
-		var role adminmodel.Role
-		store.DB.First(&role, id)
 		var menus []adminmodel.Menu
 		if menuIDs := req.GrantedMenuIDs(); len(menuIDs) > 0 {
 			store.DB.Where("id IN ?", menuIDs).Find(&menus)
 		}
-		store.DB.Model(&role).Association("Menus").Replace(menus)
+		if err := store.DB.Model(&existing).Association("Menus").Replace(menus); err != nil {
+			return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update role menus")
+		}
 	}
 
 	middleware.InvalidatePermissionCache()
+	// 只有 code/状态变了才影响持有者的鉴权上下文，且只清这些用户，避免一改角色就让所有人缓存全失效
+	if existing.Code != req.Code || existing.Status != req.Status {
+		invalidateRoleHolders(existing.ID)
+	}
 	return dto.Success(c, nil)
+}
+
+// invalidateRoleHolders 精确失效持有该角色的用户的鉴权缓存。
+func invalidateRoleHolders(roleID uint) {
+	var userIDs []uint
+	store.DB.Model(&adminmodel.UserRole{}).Where("role_id = ?", roleID).Pluck("user_id", &userIDs)
+	for _, id := range userIDs {
+		middleware.InvalidateUserAuthCache(id)
+	}
 }
 
 // DeleteRole 删除角色
 // @Summary 删除角色
-// @Description 删除指定角色及其权限关联
+// @Description 物理删除指定角色及其菜单、用户关联
 // @Tags 系统管理 - 角色
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "角色ID"
 // @Success 200 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/role/{id} [delete]
 func DeleteRole(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
@@ -232,8 +295,28 @@ func DeleteRole(c *fiber.Ctx) error {
 	if role.Code == "super" {
 		return dto.Fail(c, fiber.StatusForbidden, "超级管理员角色受系统保护，不允许删除")
 	}
-	store.DB.Model(&role).Association("Menus").Clear()
-	store.DB.Delete(&role)
+
+	// 持有者要在关联行删除前取到，删完再精确失效他们的鉴权缓存
+	var holders []uint
+	store.DB.Model(&adminmodel.UserRole{}).Where("role_id = ?", role.ID).Pluck("user_id", &holders)
+
+	// 物理删除：name/code 带唯一索引，软删会让同名角色再也建不出来
+	err := store.DB.Transaction(func(tx *gorm.DB) error {
+		if err := tx.Where("role_id = ?", role.ID).Delete(&adminmodel.RoleMenu{}).Error; err != nil {
+			return err
+		}
+		if err := tx.Where("role_id = ?", role.ID).Delete(&adminmodel.UserRole{}).Error; err != nil {
+			return err
+		}
+		return tx.Unscoped().Delete(&adminmodel.Role{}, role.ID).Error
+	})
+	if err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to delete role")
+	}
+
 	middleware.InvalidatePermissionCache()
+	for _, id := range holders {
+		middleware.InvalidateUserAuthCache(id)
+	}
 	return dto.Success(c, nil)
 }

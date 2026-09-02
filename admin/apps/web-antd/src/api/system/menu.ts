@@ -11,16 +11,10 @@ export namespace SystemMenuApi {
     'success',
     'warning',
   ] as const;
-  /** 徽标类型集合 */
-  export const BadgeTypes = ['dot', 'normal'] as const;
-  /** 菜单类型集合 */
-  export const MenuTypes = [
-    'catalog',
-    'menu',
-    'embedded',
-    'link',
-    'button',
-  ] as const;
+  /** 徽标类型 */
+  export type BadgeType = 'dot' | 'normal';
+  /** 菜单类型 */
+  export type MenuType = 'button' | 'catalog' | 'embedded' | 'link' | 'menu';
   /** 系统菜单 */
   export interface SystemMenu {
     [key: string]: any;
@@ -45,7 +39,7 @@ export namespace SystemMenuApi {
       /** 徽标内容(当徽标类型为normal时有效) */
       badge?: string;
       /** 徽标类型 */
-      badgeType?: (typeof BadgeTypes)[number];
+      badgeType?: BadgeType;
       /** 徽标颜色 */
       badgeVariants?: (typeof BadgeVariants)[number];
       /** 在菜单中隐藏下级 */
@@ -86,7 +80,7 @@ export namespace SystemMenuApi {
     /** 重定向 */
     redirect?: string;
     /** 菜单类型 */
-    type: (typeof MenuTypes)[number];
+    type: MenuType;
   }
 }
 

@@ -114,7 +114,7 @@ export function useColumns(
           {
             authCode: 'System:Dept:Create',
             code: 'append',
-            text: '新增下级',
+            text: $t('system.common.appendChild'),
           },
           { authCode: 'System:Dept:Edit', code: 'edit' },
           {

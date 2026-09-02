@@ -42,7 +42,10 @@ const [Drawer, drawerApi] = useVbenDrawer({
 
     // 防御：如果 permissions 字段意外为非数组（例如初始化异常），
     // 直接拒绝提交，避免误把所有菜单关联清空。
-    if (values.permissions !== undefined && !Array.isArray(values.permissions)) {
+    if (
+      values.permissions !== undefined &&
+      !Array.isArray(values.permissions)
+    ) {
       message.error($t('system.role.permissionLoadFailed'));
       return;
     }
@@ -101,11 +104,11 @@ async function loadPermissions() {
   }
 }
 
-const getDrawerTitle = computed(() => {
-  return formData.value?.id
-    ? $t('common.edit', $t('system.role.name'))
-    : $t('common.create', $t('system.role.name'));
-});
+const getDrawerTitle = computed(() =>
+  formData.value?.id
+    ? $t('ui.actionTitle.edit', [$t('system.role.name')])
+    : $t('ui.actionTitle.create', [$t('system.role.name')]),
+);
 
 function getNodeClass(node: Recordable<any>) {
   const classes: string[] = [];

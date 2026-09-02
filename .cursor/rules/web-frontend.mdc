@@ -1,6 +1,6 @@
 ---
 description: Vben Admin 前端开发规范
-globs: web/**/*.{vue,ts,tsx}
+globs: admin/**/*.{vue,ts,tsx}
 alwaysApply: true
 ---
 
@@ -11,7 +11,7 @@ alwaysApply: true
 Vben Admin v5 文档: https://doc.vvbin.cn/
 遇到组件用法、路由配置、权限控制等问题时优先查阅官方文档。
 
-## 项目结构 (web/apps/web-antd/src/)
+## 项目结构 (admin/apps/web-antd/src/)
 
 - `api/` - API 接口定义 (requestClient)
 - `views/` - 页面组件

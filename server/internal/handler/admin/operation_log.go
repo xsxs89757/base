@@ -18,7 +18,7 @@ import (
 // @Produce json
 // @Security BearerAuth
 // @Param page query int false "页码" default(1)
-// @Param pageSize query int false "每页数量" default(20)
+// @Param pageSize query int false "每页数量，最大 200" default(20)
 // @Param username query string false "操作用户(模糊搜索)"
 // @Param method query string false "请求方法: GET/POST/PUT/DELETE"
 // @Param path query string false "请求路径(模糊搜索)"
@@ -26,8 +26,7 @@ import (
 // @Success 200 {object} dto.Response{data=dto.PageData{items=[]admindto.OperationLogItem}}
 // @Router /admin/system/operation-log/list [get]
 func GetOperationLogList(c *fiber.Ctx) error {
-	page, _ := strconv.Atoi(c.Query("page", "1"))
-	pageSize, _ := strconv.Atoi(c.Query("pageSize", "20"))
+	page, pageSize := dto.ParsePage(c)
 	username := c.Query("username")
 	method := c.Query("method")
 	path := c.Query("path")
@@ -50,9 +49,13 @@ func GetOperationLogList(c *fiber.Ctx) error {
 		query = query.Where("status = ?", status)
 	}
 
-	query.Count(&total)
+	if err := query.Count(&total).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to get operation logs")
+	}
 	offset := (page - 1) * pageSize
-	query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&logs)
+	if err := query.Order("id DESC").Offset(offset).Limit(pageSize).Find(&logs).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to get operation logs")
+	}
 
 	items := make([]admindto.OperationLogItem, len(logs))
 	for i, l := range logs {
@@ -78,10 +81,17 @@ func GetOperationLogList(c *fiber.Ctx) error {
 // @Security BearerAuth
 // @Param id path int true "日志ID"
 // @Success 200 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/operation-log/{id} [delete]
 func DeleteOperationLog(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
-	store.DB.Delete(&adminmodel.OperationLog{}, id)
+	res := store.DB.Delete(&adminmodel.OperationLog{}, id)
+	if res.Error != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to delete operation log")
+	}
+	if res.RowsAffected == 0 {
+		return dto.Fail(c, fiber.StatusNotFound, "Operation log not found")
+	}
 	return dto.Success(c, nil)
 }
 
@@ -93,6 +103,8 @@ func DeleteOperationLog(c *fiber.Ctx) error {
 // @Success 200 {object} dto.Response
 // @Router /admin/system/operation-log/clear [delete]
 func ClearOperationLog(c *fiber.Ctx) error {
-	store.DB.Where("1 = 1").Delete(&adminmodel.OperationLog{})
+	if err := store.DB.Where("1 = 1").Delete(&adminmodel.OperationLog{}).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to clear operation logs")
+	}
 	return dto.Success(c, nil)
 }

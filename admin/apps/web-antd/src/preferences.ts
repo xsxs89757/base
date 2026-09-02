@@ -7,6 +7,8 @@ import { defineOverridesPreferences } from '@vben/preferences';
  */
 export const overridesPreferences = defineOverridesPreferences({
   app: {
+    // 登录后的默认落地页；main.ts 里还会强制覆盖一次，避免旧浏览器缓存的 /analytics 生效
+    defaultHomePath: '/workspace',
     name: import.meta.env.VITE_APP_TITLE,
   },
   // 关闭登录页/布局底部的 Copyright Vben 版权栏，并在偏好设置抽屉里隐藏该配置项

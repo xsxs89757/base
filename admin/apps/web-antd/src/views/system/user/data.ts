@@ -39,7 +39,7 @@ export function useFormSchema(): VbenFormSchema[] {
       componentProps: {
         mode: 'multiple',
         optionFilterProp: 'label',
-        placeholder: '请选择角色',
+        placeholder: $t('system.user.rolePlaceholder'),
         style: { width: '100%' },
       },
       fieldName: 'roleIds',

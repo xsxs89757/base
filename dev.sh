@@ -503,14 +503,18 @@ chuanyun_down() {
     return 0
 }
 
+CLEANED=0
 cleanup() {
+    # Ctrl+C 和 EXIT 都会进来，只清理一次
+    [ "$CLEANED" = "1" ] && return 0
+    CLEANED=1
     echo ""
     echo -e "${YELLOW}正在关闭服务...${NC}"
     chuanyun_down
     [ -n "$AIR_PID" ] && kill_tree "$AIR_PID" && echo -e "${GREEN}后端已停止${NC}"
     [ -n "$ADMIN_PID" ] && kill_tree "$ADMIN_PID" && echo -e "${GREEN}前端已停止${NC}"
     type project_dev_stop &>/dev/null && project_dev_stop
-    command -v pkill &>/dev/null && pkill -P $$ 2>/dev/null
+    command -v pkill &>/dev/null && pkill -P $$ 2>/dev/null || true
 
     # Windows 下杀 bash 作业不一定连带结束原生子进程，按本次已分配的端口兜底清一遍
     # (CLAIMED_PORTS 覆盖后端/前端及 dev.project.sh 扩展服务)
@@ -522,11 +526,13 @@ cleanup() {
             done
         done
     fi
-    exit 0
+    return 0
 }
 
-
-trap cleanup SIGINT SIGTERM
+# EXIT 也要挂：脚本因 set -e 中途退出（比如后端起来后 pnpm install 失败）时同样收尾，
+# 否则已启动的 air 和已登记的隧道会留成孤儿，下次启动只会看到端口被占自动漂移
+trap 'cleanup; exit 0' SIGINT SIGTERM
+trap cleanup EXIT
 
 # --- 下游挂载点: dev.project.sh (基底不包含此文件、永不创建，下游按需新增) ---
 # 在仓库根新增 dev.project.sh 即可挂载额外开发服务，可实现三个函数:

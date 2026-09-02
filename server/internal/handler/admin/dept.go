@@ -10,6 +10,7 @@ import (
 	"base/internal/validator"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 // GetDeptList 获取部门列表
@@ -45,6 +46,12 @@ func CreateDept(c *fiber.Ctx) error {
 		return err
 	}
 
+	if ok, err := parentExists(store.DB, &adminmodel.Dept{}, req.ParentID); err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create dept")
+	} else if !ok {
+		return dto.Fail(c, fiber.StatusBadRequest, "上级部门不存在")
+	}
+
 	dept := adminmodel.Dept{
 		ParentID: req.ParentID,
 		Name:     req.Name,
@@ -60,7 +67,7 @@ func CreateDept(c *fiber.Ctx) error {
 
 // UpdateDept 更新部门
 // @Summary 更新部门
-// @Description 更新部门信息
+// @Description 更新部门信息；上级不能设为自身或其下级
 // @Tags 系统管理 - 部门
 // @Accept json
 // @Produce json
@@ -69,12 +76,28 @@ func CreateDept(c *fiber.Ctx) error {
 // @Param request body admindto.DeptRequest true "部门信息"
 // @Success 200 {object} dto.Response
 // @Failure 400 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/dept/{id} [put]
 func UpdateDept(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
 	var req admindto.DeptRequest
 	if err := validator.BindAndValidate(c, &req); err != nil {
 		return err
+	}
+
+	var existing adminmodel.Dept
+	if err := store.DB.First(&existing, id).Error; err != nil {
+		return dto.Fail(c, fiber.StatusNotFound, "Dept not found")
+	}
+	if cyclic, err := isSelfOrDescendant(store.DB, &adminmodel.Dept{}, existing.ID, req.ParentID); err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update dept")
+	} else if cyclic {
+		return dto.Fail(c, fiber.StatusBadRequest, "上级不能是自身或其下级")
+	}
+	if ok, err := parentExists(store.DB, &adminmodel.Dept{}, req.ParentID); err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update dept")
+	} else if !ok {
+		return dto.Fail(c, fiber.StatusBadRequest, "上级部门不存在")
 	}
 
 	updates := map[string]any{
@@ -84,23 +107,40 @@ func UpdateDept(c *fiber.Ctx) error {
 		"status":    req.Status,
 		"remark":    req.Remark,
 	}
-	store.DB.Model(&adminmodel.Dept{}).Where("id = ?", id).Updates(updates)
+	if err := store.DB.Model(&adminmodel.Dept{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update dept")
+	}
 	return dto.Success(c, nil)
 }
 
 // DeleteDept 删除部门
 // @Summary 删除部门
-// @Description 删除指定部门及其子部门
+// @Description 删除指定部门及其全部下级
 // @Tags 系统管理 - 部门
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "部门ID"
 // @Success 200 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/dept/{id} [delete]
 func DeleteDept(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
-	store.DB.Where("parent_id = ?", id).Delete(&adminmodel.Dept{})
-	store.DB.Delete(&adminmodel.Dept{}, id)
+	var dept adminmodel.Dept
+	if err := store.DB.First(&dept, id).Error; err != nil {
+		return dto.Fail(c, fiber.StatusNotFound, "Dept not found")
+	}
+
+	// 后代在事务内收集，避免收集与删除之间新插入的下级漏删
+	err := store.DB.Transaction(func(tx *gorm.DB) error {
+		descendants, err := collectDescendantIDs(tx, &adminmodel.Dept{}, dept.ID)
+		if err != nil {
+			return err
+		}
+		return tx.Where("id IN ?", append(descendants, dept.ID)).Delete(&adminmodel.Dept{}).Error
+	})
+	if err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to delete dept")
+	}
 	return dto.Success(c, nil)
 }
 

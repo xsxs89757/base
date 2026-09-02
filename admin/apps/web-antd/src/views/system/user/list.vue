@@ -1,6 +1,4 @@
 <script lang="ts" setup>
-import type { Recordable } from '@vben/types';
-
 import type {
   OnActionClickParams,
   VxeTableGridOptions,
@@ -74,14 +72,17 @@ async function onStatusChange(
   newStatus: number,
   row: SystemUserApi.SystemUser,
 ) {
-  const status: Recordable<string> = { 0: '禁用', 1: '启用' };
+  const statusText = $t(newStatus === 1 ? 'common.enabled' : 'common.disabled');
   try {
     await new Promise((resolve, reject) => {
       Modal.confirm({
-        content: `你要将 ${row.username} 的状态切换为 【${status[newStatus.toString()]}】 吗？`,
+        content: $t('system.common.toggleStatusConfirm', [
+          row.username,
+          statusText,
+        ]),
         onCancel: () => reject(new Error('cancelled')),
         onOk: () => resolve(true),
-        title: '切换状态',
+        title: $t('system.common.toggleStatusTitle'),
       });
     });
     await updateUser(row.id, { ...row, status: newStatus });

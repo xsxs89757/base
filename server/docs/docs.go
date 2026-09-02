@@ -26,7 +26,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "用户修改自己的密码，需验证旧密码",
+                "description": "用户修改自己的密码，需验证旧密码；成功后此前签发的 token 全部失效，需重新登录",
                 "consumes": [
                     "application/json"
                 ],
@@ -216,6 +216,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             }
@@ -312,6 +318,12 @@ const docTemplate = `{
                                 }
                             ]
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             }
@@ -382,7 +394,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 20,
-                        "description": "每页数量",
+                        "description": "每页数量，最大 200",
                         "name": "pageSize",
                         "in": "query"
                     },
@@ -483,6 +495,18 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             },
@@ -492,6 +516,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "物理删除，删除后同名配置键可再次创建",
                 "produces": [
                     "application/json"
                 ],
@@ -511,6 +536,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -628,7 +659,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "更新部门信息",
+                "description": "更新部门信息；上级不能设为自身或其下级",
                 "consumes": [
                     "application/json"
                 ],
@@ -669,6 +700,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             },
@@ -678,7 +715,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "删除指定部门及其子部门",
+                "description": "删除指定部门及其全部下级",
                 "produces": [
                     "application/json"
                 ],
@@ -698,6 +735,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -919,7 +962,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "更新菜单信息",
+                "description": "更新菜单信息；父级不能设为自身或其下级",
                 "consumes": [
                     "application/json"
                 ],
@@ -960,6 +1003,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             },
@@ -969,7 +1018,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "删除指定菜单及其子菜单",
+                "description": "删除指定菜单及其全部下级（含按钮），并清理角色关联，权限码即时失效",
                 "produces": [
                     "application/json"
                 ],
@@ -989,6 +1038,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -1046,7 +1101,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 20,
-                        "description": "每页数量",
+                        "description": "每页数量，最大 200",
                         "name": "pageSize",
                         "in": "query"
                     },
@@ -1138,6 +1193,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -1248,7 +1309,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "分页查询角色列表，支持按名称和状态筛选",
+                "description": "分页查询角色列表，支持按名称、编码、状态和创建时间筛选",
                 "produces": [
                     "application/json"
                 ],
@@ -1267,7 +1328,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 20,
-                        "description": "每页数量",
+                        "description": "每页数量，最大 200",
                         "name": "pageSize",
                         "in": "query"
                     },
@@ -1279,8 +1340,26 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
+                        "description": "角色编码(模糊搜索)",
+                        "name": "code",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
                         "description": "状态: 0=禁用 1=启用",
                         "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "创建时间起（含），YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss",
+                        "name": "startTime",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "创建时间止（含），YYYY-MM-DD 或 YYYY-MM-DD HH:mm:ss",
+                        "name": "endTime",
                         "in": "query"
                     }
                 ],
@@ -1421,6 +1500,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             },
@@ -1430,7 +1515,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "删除指定角色及其权限关联",
+                "description": "物理删除指定角色及其菜单、用户关联",
                 "produces": [
                     "application/json"
                 ],
@@ -1450,6 +1535,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -1510,6 +1601,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             }
@@ -1540,7 +1637,7 @@ const docTemplate = `{
                     {
                         "type": "integer",
                         "default": 20,
-                        "description": "每页数量",
+                        "description": "每页数量，最大 200",
                         "name": "pageSize",
                         "in": "query"
                     },
@@ -1607,7 +1704,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "更新用户信息和角色分配",
+                "description": "更新用户信息和角色分配；重置密码会让该用户已签发的 token 全部失效",
                 "consumes": [
                     "application/json"
                 ],
@@ -1648,6 +1745,18 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
                     }
                 }
             },
@@ -1657,7 +1766,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
-                "description": "删除指定用户",
+                "description": "物理删除指定用户及其角色关联，删除后同名用户可再次创建",
                 "produces": [
                     "application/json"
                 ],
@@ -1677,6 +1786,18 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -2353,7 +2474,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/",
 	Schemes:          []string{"http", "https"},
 	Title:            "Admin 后台管理系统 API",
-	Description:      "基于 Go Fiber + GORM + Casbin + JWT 的后台管理系统 API 文档",
+	Description:      "基于 Go Fiber + GORM + JWT 的后台管理系统 API 文档",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

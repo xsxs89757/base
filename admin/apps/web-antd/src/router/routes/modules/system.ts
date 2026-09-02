@@ -2,6 +2,11 @@ import type { RouteRecordRaw } from 'vue-router';
 
 import { $t } from '#/locales';
 
+/**
+ * 注意：backend 权限模式下菜单与路由来自后端 GET /admin/menu/all，本文件不会生成菜单，
+ * 改这里加不出新菜单。新增系统页面：写 views/system 下的组件，再到"菜单管理"配置，
+ * 或在 server/internal/store/store.go 的 seedMenus 里登记。详见 dashboard.ts 头部说明。
+ */
 const routes: RouteRecordRaw[] = [
   {
     meta: {

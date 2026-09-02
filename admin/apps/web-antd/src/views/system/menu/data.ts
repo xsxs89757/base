@@ -100,7 +100,7 @@ export function useColumns(
           {
             authCode: 'System:Menu:Create',
             code: 'append',
-            text: '新增下级',
+            text: $t('system.common.appendChild'),
           },
           { authCode: 'System:Menu:Edit', code: 'edit' },
           { authCode: 'System:Menu:Delete', code: 'delete' },

@@ -1,6 +1,4 @@
 <script lang="ts" setup>
-import type { Recordable } from '@vben/types';
-
 import type {
   OnActionClickParams,
   VxeTableGridOptions,
@@ -82,7 +80,7 @@ function confirm(content: string, title: string) {
     Modal.confirm({
       content,
       onCancel() {
-        reject(new Error('已取消'));
+        reject(new Error('cancelled'));
       },
       onOk() {
         reslove(true);
@@ -102,14 +100,11 @@ async function onStatusChange(
   newStatus: number,
   row: SystemRoleApi.SystemRole,
 ) {
-  const status: Recordable<string> = {
-    0: '禁用',
-    1: '启用',
-  };
+  const statusText = $t(newStatus === 1 ? 'common.enabled' : 'common.disabled');
   try {
     await confirm(
-      `你要将${row.name}的状态切换为 【${status[newStatus.toString()]}】 吗？`,
-      `切换状态`,
+      $t('system.common.toggleStatusConfirm', [row.name, statusText]),
+      $t('system.common.toggleStatusTitle'),
     );
     // 仅提交需要变更的字段，避免把 row.permissions（来自列表的旧数据）
     // 误传给后端导致整套菜单权限被替换。后端在未收到 permissions 字段时

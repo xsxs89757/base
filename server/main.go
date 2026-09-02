@@ -6,7 +6,6 @@ import (
 
 	"base/config"
 	"base/docs"
-	"base/internal/middleware"
 	"base/internal/router"
 	"base/internal/store"
 	"base/internal/validator"
@@ -22,7 +21,7 @@ import (
 
 // @title Admin 后台管理系统 API
 // @version 1.0
-// @description 基于 Go Fiber + GORM + Casbin + JWT 的后台管理系统 API 文档
+// @description 基于 Go Fiber + GORM + JWT 的后台管理系统 API 文档
 // @termsOfService http://swagger.io/terms/
 
 // @contact.name API Support
@@ -41,10 +40,13 @@ func main() {
 	if err := config.Load("config.yaml"); err != nil {
 		log.Fatalf("failed to load config: %v", err)
 	}
+	// 生产模式下占位/过短的 jwt.secret 直接拒绝启动：否则任何人都能伪造超管 token
+	if err := config.ValidateProduction(); err != nil {
+		log.Fatalf("refusing to start: %v (generate one with: openssl rand -base64 48)", err)
+	}
 
 	validator.Init()
 	store.Init()
-	middleware.InitCasbin()
 
 	appCfg := fiber.Config{
 		ErrorHandler: func(c *fiber.Ctx, err error) error {

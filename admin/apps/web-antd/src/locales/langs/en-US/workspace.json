@@ -1,0 +1,11 @@
+{
+  "greeting": {
+    "morning": "Good morning, {0}",
+    "afternoon": "Good afternoon, {0}",
+    "evening": "Good evening, {0}"
+  },
+  "welcome": "Welcome back",
+  "currentRole": "Current role",
+  "quickNav": "Quick access",
+  "noMenu": "No accessible menus yet, ask an administrator for access"
+}

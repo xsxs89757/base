@@ -1,6 +1,4 @@
 <script lang="ts" setup>
-import type { Recordable } from '@vben/types';
-
 import type {
   OnActionClickParams,
   VxeTableGridOptions,
@@ -23,7 +21,7 @@ import {
 } from '#/api/system/config';
 import { $t } from '#/locales';
 
-import { useColumns } from './data';
+import { useColumns, useGridFormSchema } from './data';
 import Form from './modules/form.vue';
 
 const groupOptions = ref<Array<{ label: string; value: string }>>([]);
@@ -35,36 +33,7 @@ const [FormDrawer, formDrawerApi] = useVbenDrawer({
 
 const [Grid, gridApi] = useVbenVxeGrid({
   formOptions: {
-    schema: [
-      {
-        component: 'Input',
-        fieldName: 'configKey',
-        label: $t('system.config.configKey'),
-      },
-      {
-        component: 'Select',
-        componentProps: () => ({
-          allowClear: true,
-          options: groupOptions.value,
-          placeholder: '请选择分组',
-          showSearch: true,
-        }),
-        fieldName: 'configGroup',
-        label: $t('system.config.configGroup'),
-      },
-      {
-        component: 'Select',
-        componentProps: {
-          allowClear: true,
-          options: [
-            { label: $t('common.enabled'), value: 1 },
-            { label: $t('common.disabled'), value: 0 },
-          ],
-        },
-        fieldName: 'status',
-        label: $t('system.config.status'),
-      },
-    ],
+    schema: useGridFormSchema(groupOptions),
     submitOnChange: true,
   },
   gridOptions: {
@@ -112,14 +81,17 @@ async function onStatusChange(
   newStatus: number,
   row: SystemConfigApi.SystemConfig,
 ) {
-  const status: Recordable<string> = { 0: '禁用', 1: '启用' };
+  const statusText = $t(newStatus === 1 ? 'common.enabled' : 'common.disabled');
   try {
     await new Promise((resolve, reject) => {
       Modal.confirm({
-        content: `你要将 ${row.configKey} 的状态切换为 【${status[newStatus.toString()]}】 吗？`,
+        content: $t('system.common.toggleStatusConfirm', [
+          row.configKey,
+          statusText,
+        ]),
         onCancel: () => reject(new Error('cancelled')),
         onOk: () => resolve(true),
-        title: '切换状态',
+        title: $t('system.common.toggleStatusTitle'),
       });
     });
     await updateConfig(row.id, { ...row, status: newStatus });

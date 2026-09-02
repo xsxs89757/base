@@ -10,8 +10,6 @@ import { createIconifyIcon } from '@vben/icons';
 
 import { Button, message, Modal } from 'ant-design-vue';
 
-const Trash2 = createIconifyIcon('lucide:trash-2');
-
 import { useVbenVxeGrid } from '#/adapter/vxe-table';
 import {
   clearOperationLog,
@@ -21,6 +19,8 @@ import {
 import { $t } from '#/locales';
 
 import { useColumns, useGridFormSchema } from './data';
+
+const Trash2 = createIconifyIcon('lucide:trash-2');
 
 const [Grid, gridApi] = useVbenVxeGrid({
   formOptions: {
@@ -84,13 +84,13 @@ function onDelete(row: SystemOperationLogApi.OperationLog) {
 
 function onClear() {
   Modal.confirm({
-    content: '确定要清空所有操作日志吗？此操作不可恢复。',
+    content: $t('system.operationLog.clearConfirm'),
     onOk: async () => {
       await clearOperationLog();
-      message.success('操作日志已清空');
+      message.success($t('system.operationLog.clearSuccess'));
       gridApi.query();
     },
-    title: '清空操作日志',
+    title: $t('system.operationLog.clearTitle'),
   });
 }
 </script>

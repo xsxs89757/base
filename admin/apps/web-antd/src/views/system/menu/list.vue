@@ -111,7 +111,7 @@ function onDelete(row: SystemMenuApi.SystemMenu) {
 <template>
   <Page auto-content-height>
     <FormDrawer @success="onRefresh" />
-    <Grid>
+    <Grid :table-title="$t('system.menu.list')">
       <template #toolbar-tools>
         <Button
           v-access:code="'System:Menu:Create'"

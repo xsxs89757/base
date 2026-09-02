@@ -1,7 +1,7 @@
 <script lang="ts" setup>
 import type { SystemUserApi } from '#/api/system/user';
 
-import { nextTick, ref } from 'vue';
+import { computed, nextTick, ref } from 'vue';
 
 import { useVbenDrawer } from '@vben/common-ui';
 
@@ -67,7 +67,9 @@ const [Drawer, drawerApi] = useVbenDrawer({
       },
       {
         componentProps: {
-          placeholder: isEdit ? '留空则不修改' : undefined,
+          placeholder: isEdit
+            ? $t('system.common.leaveBlankToKeep')
+            : undefined,
           type: 'password',
         },
         fieldName: 'password',
@@ -90,14 +92,14 @@ const [Drawer, drawerApi] = useVbenDrawer({
   },
 });
 
-const getDrawerTitle = () => {
-  return id.value
-    ? $t('common.edit') + $t('system.user.name')
-    : $t('common.create') + $t('system.user.name');
-};
+const getDrawerTitle = computed(() =>
+  id.value
+    ? $t('ui.actionTitle.edit', [$t('system.user.name')])
+    : $t('ui.actionTitle.create', [$t('system.user.name')]),
+);
 </script>
 <template>
-  <Drawer :title="getDrawerTitle()">
+  <Drawer :title="getDrawerTitle">
     <Form />
   </Drawer>
 </template>

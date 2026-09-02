@@ -13,6 +13,7 @@ import (
 	"base/internal/validator"
 
 	"github.com/gofiber/fiber/v2"
+	"gorm.io/gorm"
 )
 
 // GetAllMenus 获取用户菜单
@@ -33,26 +34,29 @@ func GetAllMenus(c *fiber.Ctx) error {
 
 	var menus []adminmodel.Menu
 
-	if user.ID == 1 {
+	if adminsvc.IsSuperUser(user) {
 		store.DB.
 			Where("type != ? AND status = ?", "button", 1).
 			Order("order_no ASC").
 			Find(&menus)
 	} else {
-		var roleIDs []uint
-		for _, r := range user.Roles {
-			roleIDs = append(roleIDs, r.ID)
+		// 只按启用角色取菜单，与权限判定口径一致（禁用角色的菜单不再出现在侧栏）
+		roleIDs := adminsvc.ActiveRoleIDs(user)
+		if len(roleIDs) > 0 {
+			store.DB.
+				Joins("JOIN role_menus ON role_menus.menu_id = sys_menus.id").
+				Where("role_menus.role_id IN ? AND sys_menus.type IN ? AND sys_menus.status = ?", roleIDs, []string{"menu", "embedded", "link"}, 1).
+				Order("sys_menus.order_no ASC").
+				Distinct().
+				Find(&menus)
+			menus = includeMenuAncestors(menus)
 		}
-		store.DB.
-			Joins("JOIN role_menus ON role_menus.menu_id = sys_menus.id").
-			Where("role_menus.role_id IN ? AND sys_menus.type IN ? AND sys_menus.status = ?", roleIDs, []string{"menu", "embedded", "link"}, 1).
-			Order("sys_menus.order_no ASC").
-			Distinct().
-			Find(&menus)
-		menus = includeMenuAncestors(menus)
 	}
 
 	tree := buildMenuTree(menus, 0)
+	if tree == nil {
+		tree = []fiber.Map{}
+	}
 	return dto.Success(c, tree)
 }
 
@@ -89,6 +93,12 @@ func CreateMenu(c *fiber.Ctx) error {
 		return err
 	}
 
+	if ok, err := parentExists(store.DB, &adminmodel.Menu{}, req.ParentID); err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create menu")
+	} else if !ok {
+		return dto.Fail(c, fiber.StatusBadRequest, "父级菜单不存在")
+	}
+
 	menu := menuFromRequest(req)
 	if err := store.DB.Create(&menu).Error; err != nil {
 		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to create menu")
@@ -99,7 +109,7 @@ func CreateMenu(c *fiber.Ctx) error {
 
 // UpdateMenu 更新菜单
 // @Summary 更新菜单
-// @Description 更新菜单信息
+// @Description 更新菜单信息；父级不能设为自身或其下级
 // @Tags 系统管理 - 菜单
 // @Accept json
 // @Produce json
@@ -108,12 +118,29 @@ func CreateMenu(c *fiber.Ctx) error {
 // @Param request body admindto.MenuRequest true "菜单信息"
 // @Success 200 {object} dto.Response
 // @Failure 400 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/menu/{id} [put]
 func UpdateMenu(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
 	var req admindto.MenuRequest
 	if err := validator.BindAndValidate(c, &req); err != nil {
 		return err
+	}
+
+	var existing adminmodel.Menu
+	if err := store.DB.First(&existing, id).Error; err != nil {
+		return dto.Fail(c, fiber.StatusNotFound, "Menu not found")
+	}
+	// 父级指向自身或自身的后代会让整棵子树从树形结构里"消失"，但权限码仍然有效且无法再回收
+	if cyclic, err := isSelfOrDescendant(store.DB, &adminmodel.Menu{}, existing.ID, req.ParentID); err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update menu")
+	} else if cyclic {
+		return dto.Fail(c, fiber.StatusBadRequest, "父级不能是自身或其下级")
+	}
+	if ok, err := parentExists(store.DB, &adminmodel.Menu{}, req.ParentID); err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update menu")
+	} else if !ok {
+		return dto.Fail(c, fiber.StatusBadRequest, "父级菜单不存在")
 	}
 
 	// 用 map[string]any 进行更新：
@@ -149,7 +176,9 @@ func UpdateMenu(c *fiber.Ctx) error {
 	if req.OrderNo != nil {
 		updates["order_no"] = *req.OrderNo
 	}
-	store.DB.Model(&adminmodel.Menu{}).Where("id = ?", id).Updates(updates)
+	if err := store.DB.Model(&adminmodel.Menu{}).Where("id = ?", id).Updates(updates).Error; err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to update menu")
+	}
 	middleware.InvalidatePermissionCache()
 	return dto.Success(c, nil)
 }
@@ -192,17 +221,37 @@ func menuFromRequest(req admindto.MenuRequest) adminmodel.Menu {
 
 // DeleteMenu 删除菜单
 // @Summary 删除菜单
-// @Description 删除指定菜单及其子菜单
+// @Description 删除指定菜单及其全部下级（含按钮），并清理角色关联，权限码即时失效
 // @Tags 系统管理 - 菜单
 // @Produce json
 // @Security BearerAuth
 // @Param id path int true "菜单ID"
 // @Success 200 {object} dto.Response
+// @Failure 404 {object} dto.Response
 // @Router /admin/system/menu/{id} [delete]
 func DeleteMenu(c *fiber.Ctx) error {
 	id, _ := strconv.ParseUint(c.Params("id"), 10, 64)
-	store.DB.Where("parent_id = ?", id).Delete(&adminmodel.Menu{})
-	store.DB.Delete(&adminmodel.Menu{}, id)
+	var menu adminmodel.Menu
+	if err := store.DB.First(&menu, id).Error; err != nil {
+		return dto.Fail(c, fiber.StatusNotFound, "Menu not found")
+	}
+
+	// 只删一层会留下孤儿按钮：树上看不见，auth_code 却仍然有效且无法回收。
+	// 后代在事务内收集，避免收集与删除之间新插入的子节点漏删。
+	err := store.DB.Transaction(func(tx *gorm.DB) error {
+		descendants, err := collectDescendantIDs(tx, &adminmodel.Menu{}, menu.ID)
+		if err != nil {
+			return err
+		}
+		ids := append(descendants, menu.ID)
+		if err := tx.Where("menu_id IN ?", ids).Delete(&adminmodel.RoleMenu{}).Error; err != nil {
+			return err
+		}
+		return tx.Where("id IN ?", ids).Delete(&adminmodel.Menu{}).Error
+	})
+	if err != nil {
+		return dto.Fail(c, fiber.StatusInternalServerError, "Failed to delete menu")
+	}
 	middleware.InvalidatePermissionCache()
 	return dto.Success(c, nil)
 }
