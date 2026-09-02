@@ -32,7 +32,7 @@ import (
 // @description 输入 Bearer {token} 格式的 JWT 令牌
 
 // 框架层（配置、鉴权、权限码、数据层、系统管理模块）在 github.com/xsxs89757/base-kit，
-// 用 go get -u 升级，不再随模板 merge。本文件只负责把项目自己的东西挂上去：
+// 用 go get ...@latest 升级，不再随模板 merge。本文件只负责把项目自己的东西挂上去：
 // 模型和种子数据在 internal/store/project.go，业务路由在 internal/router/project.go。
 func main() {
 	basekit.Run(basekit.Options{

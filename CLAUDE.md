@@ -46,7 +46,7 @@ git push -u origin main
 
 按后续 `make sync-base` 的合并成本，把文件分为两类：
 
-**后端框架层不在仓库里，改不了也不用改**：配置、鉴权、权限码、数据层、系统管理模块（用户/角色/菜单/部门/配置/操作日志）都在 `github.com/xsxs89757/base-kit`。修 bug 或加通用功能到 kit 仓库提，下游 `go get -u github.com/xsxs89757/base-kit` 就拿到，不再产生 merge 冲突。
+**后端框架层不在仓库里，改不了也不用改**：配置、鉴权、权限码、数据层、系统管理模块（用户/角色/菜单/部门/配置/操作日志）都在 `github.com/xsxs89757/base-kit`。修 bug 或加通用功能到 kit 仓库提，下游 `go get github.com/xsxs89757/base-kit@latest` 就拿到，不再产生 merge 冲突。
 
 kit 提供的扩展点（够用就别 fork）：
 
@@ -122,7 +122,7 @@ kit 提供的扩展点（够用就别 fork）：
 
 | 需求 | 去哪 |
 | --- | --- |
-| 改框架层的 bug / 加通用能力 | kit 仓库（本地 `../base-kit`），发版后 `go get -u` |
+| 改框架层的 bug / 加通用能力 | kit 仓库（本地 `../base-kit`），发版后 `go get ...@latest` |
 | 同时改 kit 和模板 | `make kit-dev` 生成 `server/go.work` 直接编译本地 kit 源码，改完 `make kit-undev` |
 | 加业务接口 | `server/internal/` 新增文件 + `router/project.go` 注册 |
 | 覆盖 kit 的某个接口 | `main.go` 里用 `basekit.Options.PreRoutes` 注册同路径 |
@@ -134,13 +134,17 @@ kit 提供的扩展点（够用就别 fork）：
 
 后台管理功能按下面顺序补齐（这些目录的基底实现已搬到 kit，下面说的是**下游新增业务**的落点）：
 
-1. `server/internal/model/admin/`：GORM 数据模型。
-2. `server/internal/dto/admin/`：请求/响应 DTO。
-3. `server/internal/validator/admin/`：请求校验。
-4. `server/internal/service/admin/`：业务逻辑。
-5. `server/internal/handler/admin/`：HTTP handler 和 Swagger 注解。
+1. `server/internal/model/<业务名>/`：GORM 数据模型。
+2. `server/internal/dto/<业务名>/`：请求/响应 DTO。
+3. `server/internal/validator/<业务名>/`：请求校验。
+4. `server/internal/service/<业务名>/`：业务逻辑。
+5. `server/internal/handler/<业务名>/`：HTTP handler 和 Swagger 注解。
 6. `server/internal/router/project.go`：注册路由，并用 `middleware.RegisterRoutePermissions` 登记权限码。
 7. `server/docs/`：API 变更后重新生成 Swagger。
+
+目录名和包名都别用 `admin`：那是 kit 的包名，同一文件里再 import kit 的 `adminmodel`/`admindto` 就得起两个别名；
+更麻烦的是把自己的文件放进和 kit 同名的目录后，将来 kit 再接管点什么，同一个 import 路径下就有了两个来源
+（下游真实案例：6 个基底目录里 48 个自己的文件，改写后引用方全部 undefined）。
 
 公共层：
 

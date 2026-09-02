@@ -143,12 +143,8 @@ github.com/valyala/fasthttp v1.51.0 h1:8b30A5JlZ6C7AS81RsWjYMQmrZG6feChmgAolCl1S
 github.com/valyala/fasthttp v1.51.0/go.mod h1:oI2XroL+lI7vdXyYoQk03bXBThfFl2cVdIA3Xl7cH8g=
 github.com/valyala/tcplisten v1.0.0 h1:rBHj/Xf+E1tRGZyWIWwJDiRY0zc1Js+CV5DqwacVSA8=
 github.com/valyala/tcplisten v1.0.0/go.mod h1:T0xQ8SeCZGxckz9qRXTfG43PvQ/mcWh7FwZEA7Ioqkc=
-github.com/xsxs89757/base-kit v0.1.0 h1:g4JXk7avPlexdFi7aVWirNVjM2V4HbSrEvUiAVEfYBY=
-github.com/xsxs89757/base-kit v0.1.0/go.mod h1:uc1AXr4ebhpg5yc1XGSj15zerLzLu3sQFmMcMoCkXGU=
-github.com/xsxs89757/base-kit v1.0.0 h1:iIRgC0uTmS8kATCc0QYYYvDyY8l9FvzDjQBqvosElcU=
-github.com/xsxs89757/base-kit v1.0.0/go.mod h1:uc1AXr4ebhpg5yc1XGSj15zerLzLu3sQFmMcMoCkXGU=
-github.com/xsxs89757/base-kit v1.0.2 h1:71jCZA+EWWrIioP9LYEZaaVIkPjTeS9bkeR0YpR482s=
-github.com/xsxs89757/base-kit v1.0.2/go.mod h1:uc1AXr4ebhpg5yc1XGSj15zerLzLu3sQFmMcMoCkXGU=
+github.com/xsxs89757/base-kit v1.0.3 h1:WXGYUmZwtfXueEM9mUdA9Rzjf6jSNgJicX94BbKxTi4=
+github.com/xsxs89757/base-kit v1.0.3/go.mod h1:uc1AXr4ebhpg5yc1XGSj15zerLzLu3sQFmMcMoCkXGU=
 golang.org/x/crypto v0.55.0 h1:+KWHjbgOaAQ66dh/YlkZKHlz9ZUlq61AFirAR9ntP8M=
 golang.org/x/crypto v0.55.0/go.mod h1:uq0V9dE/fzQuJtbnL+2EhWOE63vo164FY8xqEnV9xis=
 golang.org/x/exp v0.0.0-20251219203646-944ab1f22d93 h1:fQsdNF2N+/YewlRZiricy4P1iimyPKZ/xwniHj8Q2a0=

@@ -78,10 +78,13 @@ release-admin publish-admin:
 release-%:
 	@./deploy.sh $* $(PROJECT)
 
-# 框架层在 github.com/xsxs89757/base-kit，用 go get -u 升级；下面三个目标只在少数场景用到
+# 框架层在 github.com/xsxs89757/base-kit，用 go get github.com/xsxs89757/base-kit@latest 升级；
+# 下面三个目标只在少数场景用到
 migrate-kit:
 	@echo "==> 改写 import 路径 (base/internal/* -> base-kit)"
-	@cd server && go run github.com/xsxs89757/base-kit/cmd/basekit-migrate@latest ./...
+	@cd server && go run github.com/xsxs89757/base-kit/cmd/basekit-migrate ./... || { \
+		echo "跑不起来通常是 go.mod 里还没有 base-kit：先 make sync-base，"; \
+		echo "解决 go.mod 冲突时保留 require github.com/xsxs89757/base-kit 那一行"; exit 1; }
 	@cd server && go mod tidy
 	@echo "==> 完成，接着跑 make swagger && make test"
 
@@ -159,13 +162,15 @@ check-hooks:
 
 base-check: check-hooks
 	@echo "==> 后端 vet / test / 交叉编译"
-	@cd server && go vet ./... && go test ./... && CGO_ENABLED=0 go build -o /dev/null .
+	@# GOWORK=off 全程：本地 make kit-dev 留下的 go.work 会让检查按本地 kit 源码跑，
+	@# 而发布（deploy.sh）永远按 go.mod 钉死的版本，两者必须一致才有意义
+	@cd server && GOWORK=off go vet ./... && GOWORK=off go test ./... && CGO_ENABLED=0 GOWORK=off go build -o /dev/null .
 	@echo "==> 脚手架 vet / test"
 	@cd tools/create-base && go vet ./... && go test ./...
 	@echo "==> 脚本语法"
 	@for f in dev.sh deploy.sh scripts/check-hooks.sh; do bash -n "$$f" || exit 1; done
 	@echo "==> Swagger 文档时效"
-	@$(MAKE) --no-print-directory swagger >/dev/null 2>&1
+	@GOWORK=off $(MAKE) --no-print-directory swagger >/dev/null 2>&1
 	@git diff --quiet -- server/docs || { echo "server/docs 已过期：make swagger 后提交生成物再发布"; exit 1; }
 	@echo "==> base-check 通过"
 

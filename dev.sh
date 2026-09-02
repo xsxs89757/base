@@ -615,6 +615,8 @@ SWAG_NOISE='Generating |TypeSpecDef is nil|Generate swagger docs|Generate genera
 # --parseDependencyLevel 3 让 swag 解析 module cache 里 base-kit 的 handler 注解（框架层已搬到那边），
 # --packagePrefix 限定只扫本模块和 kit，不扫 fiber/gorm，快 3 倍。
 # 用 go run 而不是 go install，省掉"装没装、装的哪个版本"的分歧（首次编译后有缓存）。
+# 注意：这里不加 GOWORK=off——make kit-dev 时开发者就是想看本地 kit 的接口文档。
+# 但那份 docs 别提交：CI 用 go.mod 钉死的版本重新生成后比对，会直接拦下。
 SWAG_CMD=(go run github.com/swaggo/swag/cmd/swag@v1.16.6)
 echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
 SWAG_LOG=$(mktemp)

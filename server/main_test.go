@@ -14,6 +14,7 @@ import (
 
 	basekit "github.com/xsxs89757/base-kit"
 	"github.com/xsxs89757/base-kit/config"
+	kitstore "github.com/xsxs89757/base-kit/store"
 
 	"github.com/gofiber/fiber/v2"
 )
@@ -45,6 +46,12 @@ func TestBootAndLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("启动: %v", err)
 	}
+	// Windows 上句柄不放开，t.TempDir() 的清理会失败（dev.sh 支持 Git Bash）
+	t.Cleanup(func() {
+		if sqlDB, err := kitstore.DB.DB(); err == nil {
+			sqlDB.Close()
+		}
+	})
 
 	// 登录：种子数据里的内置超管
 	token := login(t, app, "super", "123456")

@@ -347,11 +347,13 @@ deploy_server() {
     cd "$SERVER_DIR"
 
     echo -e "        生成 Swagger 文档..."
-    # swag 版本与 dev.sh / Makefile / CI 保持一致，避免生成物在不同机器上抖动
+    # swag 版本与 dev.sh / Makefile / CI 保持一致，避免生成物在不同机器上抖动。
+    # GOWORK=off 与下面的 go build 一致：本地 make kit-dev 留下的 go.work 会让 swag
+    # 按本地 kit 源码生成注解，否则 docs 来自改过的 kit、二进制来自钉死版本，两边对不上
     # 与 dev.sh 同策略：滤掉 600+ 行流水账，只留警告/报错（不用 -q，它把警告也吞了）
     local swag_log
     swag_log=$(mktemp)
-    if go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit >"$swag_log" 2>&1; then
+    if GOWORK=off go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit >"$swag_log" 2>&1; then
         grep -vE 'Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at ' "$swag_log" | sed 's/^/        /' || true
     else
         echo -e "${RED}        Swagger 生成失败（继续用上一次的文档）:${NC}"

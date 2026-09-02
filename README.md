@@ -5,7 +5,7 @@
 ## 技术栈
 
 ### 后端 (server/ + base-kit)
-- **[base-kit](https://github.com/xsxs89757/base-kit)** - 框架层与系统管理模块，`go get -u` 升级，不随模板 merge
+- **[base-kit](https://github.com/xsxs89757/base-kit)** - 框架层与系统管理模块，`go get ...@latest` 升级，不随模板 merge
 - **Fiber v2** - 高性能 Go Web 框架
 - **GORM** - Go ORM 框架 (默认 SQLite，可切换 MySQL/PostgreSQL)
 - **菜单权限码 RBAC** - 角色 → 菜单/按钮 auth_code → 路由，无额外策略表
@@ -22,7 +22,7 @@
 ## 快速开始
 
 ### 环境要求
-- Go 1.24+
+- Go 1.25+（v2.0.0 起：base-kit 的依赖要求 1.25）
 - Node.js 22+
 - pnpm 10+
 
@@ -483,7 +483,8 @@ middleware.RegisterRoutePermissions(
 - **PATCH**：修 bug、改文档。
 
 后端框架层单独版本化：`github.com/xsxs89757/base-kit`。模板的 `server/go.mod` 钉一个具体版本，
-下游想单独拿框架层的补丁可以 `cd server && go get -u github.com/xsxs89757/base-kit`，不必等基底发版。
+下游想单独拿框架层的补丁可以 `cd server && go get github.com/xsxs89757/base-kit@latest`，不必等基底发版。
+（别用 `go get -u`：它会把 kit 的依赖一并升到最新 minor，与钉死版本的初衷相反。）
 kit 的 MINOR 只增不改、数据库变更只增列，破坏性变更走 `/v2` 路径。
 
 基底维护者发布新版本（下游用不到）：

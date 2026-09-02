@@ -8,7 +8,7 @@ alwaysApply: true
 Go Fiber + Vben Admin v5 全栈后台管理系统。
 
 - 后端: Go Fiber v2, GORM (SQLite/MySQL/PostgreSQL/SQL Server), 菜单权限码 RBAC, JWT, Swagger
-- 后端框架层在外部依赖 github.com/xsxs89757/base-kit (本地副本 ../base-kit)，用 go get -u 升级
+- 后端框架层在外部依赖 github.com/xsxs89757/base-kit (本地副本 ../base-kit)，用 go get ...@latest 升级
 - 前端: Vue 3, Vben Admin v5 (Ant Design Vue), Vite, TypeScript, Pinia
 
 ## 目录结构

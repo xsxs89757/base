@@ -8,10 +8,53 @@
 
 ## [Unreleased]
 
+## [2.0.1] - 2026-09-02
+
+对 v2.0.0 的评审修复，全是工程细节，接口和数据结构没动。
+
+### 修复
+
+- `deploy.sh` 生成 Swagger 时加 `GOWORK=off`，与下面的 `go build` 一致。本地 `make kit-dev`
+  留下 `server/go.work` 时，swag 会按本地 kit 源码生成注解，而二进制按 go.mod 钉死的版本编译，
+  发布出去的 docs 与实际接口对不上。
+- `make base-check` 全程 `GOWORK=off`（vet / test / 交叉编译 / Swagger 时效），同样的原因：
+  有 go.work 时它检查的不是将要发布的那份代码。`make swagger` / `build` / `test` 不变——
+  kit-dev 时开发者就是想按本地 kit 编。
+- `make migrate-kit` 去掉 `@latest`，改用 go.mod 里钉的 kit 版本。`@latest` 在 GOPROXY 有延迟的
+  几分钟里会拿到旧版，而 base-kit v1.0.1 正好带着「改写 `base/internal/store`」那个 bug，
+  跑完 `main.go` 直接 `undefined: store.ProjectModels`。命令失败时补了一句提示。
+- `server/main_test.go` 结束时关闭 sqlite 连接：Windows 上句柄不放开，`t.TempDir()` 的清理会失败
+  （dev.sh 支持 Git Bash）。
+- `server/go.sum` 清掉 `go mod tidy` 会删的陈旧记录，下游第一次 tidy 不会再带上无关 diff。
+
+### 变更
+
+- 钉 base-kit v1.0.3：**生产模式下 5xx 响应不再回显内部错误原文**，对外统一返回
+  `Internal Server Error`，原文进日志。recover 中间件会把 panic 转成同类错误走这条路径，
+  之前 DB 错误、文件路径、panic 文本都能被外部看到。开发模式不变，4xx 不受影响。
+
+### 文档
+
+- 明确 **Go ≥ 1.25**。v2.0.0 起由 base-kit 的依赖决定（`x/sys`、`x/text`、`gorm.io/driver/postgres`
+  等都声明 `go 1.25.0`），当时没写进 README。
+- `go get -u github.com/xsxs89757/base-kit` 一律改成 `go get github.com/xsxs89757/base-kit@latest`：
+  `-u` 会把 kit 的依赖一并升到最新 minor，与模板钉死版本的初衷相反。
+- 下游业务代码的目录用 `internal/<层>/<业务名>/`，不要用 `admin`（kit 的包名）。
+  放进与 kit 同名的目录，将来 kit 再接管点什么就会出现「同一 import 路径两个来源」。
+
+### 已知
+
+- 两个冻结挂载点里的注释还指向已搬到 kit 的 `admin.go` / `store.go`。挂载点受 `make check-hooks`
+  冻结，这次不动；下次确需改动挂载点时一并修（届时会更新 `FROZEN_BLOBS`，下游有一处冲突）。
+
+### 升级步骤
+
+`make sync-base` 即可，没有额外动作。已经迁到 2.0.0 的项目不用再跑 `make migrate-kit`。
+
 ## [2.0.0] - 2026-09-02
 
 后端框架层搬到独立仓库 [base-kit](https://github.com/xsxs89757/base-kit)，从此框架层的 bug 修复和新功能
-走 `go get -u`，不再靠 git merge 一个文件一个文件地合。`server/` 里只剩装配代码、两个挂载点和业务代码。
+走 `go get ...@latest`，不再靠 git merge 一个文件一个文件地合。`server/` 里只剩装配代码、两个挂载点和业务代码。
 
 ### 破坏性变更
 
@@ -132,7 +175,8 @@ merge 无冲突、改写 4 个文件、编译测试通过、Swagger 30 条路径
 5. 检查生产 `config.yaml`：`mode: production` 时 `jwt.secret` 必须 ≥32 位且不是示例占位值，
    否则服务拒绝启动。生成方式：`openssl rand -base64 48`。
 
-[Unreleased]: https://github.com/xsxs89757/base/compare/v2.0.0...HEAD
+[Unreleased]: https://github.com/xsxs89757/base/compare/v2.0.1...HEAD
+[2.0.1]: https://github.com/xsxs89757/base/compare/v2.0.0...v2.0.1
 [2.0.0]: https://github.com/xsxs89757/base/compare/v1.0.1...v2.0.0
 [1.0.1]: https://github.com/xsxs89757/base/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/xsxs89757/base/releases/tag/v1.0.0
