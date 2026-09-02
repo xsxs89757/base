@@ -8,6 +8,13 @@
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-02
+
+### 修复
+
+- 脚手架：`create-base <项目名> --skip-install` 这种「项目名在前、选项在后」的写法之前会被
+  当成两个项目名而报错（Go 的 flag 包在第一个位置参数处停止解析），现在两种顺序都可以。
+
 ## [1.0.0] - 2026-09-02
 
 第一个正式版本。此前下游合的是 `base/main` 的 HEAD，没有版本概念；从本版本起基底按语义化版本发布。
@@ -65,5 +72,6 @@
 5. 检查生产 `config.yaml`：`mode: production` 时 `jwt.secret` 必须 ≥32 位且不是示例占位值，
    否则服务拒绝启动。生成方式：`openssl rand -base64 48`。
 
-[Unreleased]: https://github.com/xsxs89757/base/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/xsxs89757/base/compare/v1.0.1...HEAD
+[1.0.1]: https://github.com/xsxs89757/base/compare/v1.0.0...v1.0.1
 [1.0.0]: https://github.com/xsxs89757/base/releases/tag/v1.0.0

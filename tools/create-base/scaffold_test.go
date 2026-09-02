@@ -330,3 +330,53 @@ func TestParseArgs(t *testing.T) {
 		}
 	}
 }
+
+// flag 包在第一个位置参数处停止解析，而「项目名在前、选项在后」是最自然的写法，
+// 帮助里的示例也是那样写的。两种顺序必须等价。
+func TestParseArgsFlagsAfterName(t *testing.T) {
+	want := func(t *testing.T, opts options) {
+		t.Helper()
+		if opts.Name != "myshop" {
+			t.Errorf("Name = %q", opts.Name)
+		}
+		if !opts.SkipInstall {
+			t.Error("--skip-install 未生效")
+		}
+		if opts.Title != "商城后台" {
+			t.Errorf("Title = %q", opts.Title)
+		}
+		if opts.Version != "main" {
+			t.Errorf("Version = %q", opts.Version)
+		}
+	}
+
+	after, err := parseArgs([]string{"myshop", "--skip-install", "--title", "商城后台", "--version", "main"})
+	if err != nil {
+		t.Fatalf("选项在后: %v", err)
+	}
+	want(t, after)
+
+	before, err := parseArgs([]string{"--skip-install", "--title", "商城后台", "--version", "main", "myshop"})
+	if err != nil {
+		t.Fatalf("选项在前: %v", err)
+	}
+	want(t, before)
+
+	// --key=value 形式不吃掉后面的位置参数
+	eq, err := parseArgs([]string{"--title=商城后台", "myshop"})
+	if err != nil {
+		t.Fatalf("--key=value: %v", err)
+	}
+	if eq.Name != "myshop" || eq.Title != "商城后台" {
+		t.Errorf("--key=value 解析错误: name=%q title=%q", eq.Name, eq.Title)
+	}
+
+	// 混在中间也要能认出来
+	mid, err := parseArgs([]string{"--origin", "git@example.com:me/x.git", "myshop", "-v"})
+	if err != nil {
+		t.Fatalf("选项在两侧: %v", err)
+	}
+	if mid.Name != "myshop" || !mid.Verbose || mid.Origin != "git@example.com:me/x.git" {
+		t.Errorf("解析错误: %+v", mid)
+	}
+}

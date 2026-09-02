@@ -11,6 +11,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 )
 
 const defaultBaseURL = "https://github.com/xsxs89757/base.git"
@@ -57,7 +58,9 @@ func parseArgs(args []string) (options, error) {
 	fs.BoolVar(&opts.KeepOnError, "keep-on-error", false, "失败时保留已创建的目录")
 	fs.BoolVar(&opts.Verbose, "v", false, "打印执行的每条命令")
 
-	if err := fs.Parse(args); err != nil {
+	// flag 包在第一个位置参数处就停止解析，而 `create-base demo --skip-install`
+	// 是最自然的写法（帮助里的示例也是这么写的），先把选项挪到前面。
+	if err := fs.Parse(reorderArgs(fs, args)); err != nil {
 		return opts, err
 	}
 
@@ -93,6 +96,40 @@ func parseArgs(args []string) (options, error) {
 		opts.BaseURL = defaultBaseURL
 	}
 	return opts, nil
+}
+
+// reorderArgs 把选项排到位置参数前面，让 `<项目名> --flag` 和 `--flag <项目名>` 都能用。
+// 布尔选项后面不跟值，其余选项要把紧随其后的值一起带走；`--` 之后一律当位置参数。
+func reorderArgs(fs *flag.FlagSet, args []string) []string {
+	var flags, positional []string
+	for i := 0; i < len(args); i++ {
+		arg := args[i]
+		if arg == "--" {
+			positional = append(positional, args[i+1:]...)
+			break
+		}
+		if len(arg) < 2 || arg[0] != '-' {
+			positional = append(positional, arg)
+			continue
+		}
+		flags = append(flags, arg)
+		name := strings.TrimLeft(arg, "-")
+		if strings.Contains(name, "=") {
+			continue // --key=value 自带值
+		}
+		f := fs.Lookup(name)
+		if f == nil {
+			continue // 未知选项交给 flag.Parse 报错
+		}
+		if bf, ok := f.Value.(interface{ IsBoolFlag() bool }); ok && bf.IsBoolFlag() {
+			continue // 布尔选项不吃后面的值
+		}
+		if i+1 < len(args) {
+			i++
+			flags = append(flags, args[i])
+		}
+	}
+	return append(flags, positional...)
 }
 
 func usage(w *os.File) {
