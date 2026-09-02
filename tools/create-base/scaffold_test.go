@@ -92,6 +92,13 @@ func fixtureBase(t *testing.T) string {
 		t.Skip("git 不可用")
 	}
 
+	// CI runner 通常没有全局 git 身份，而脚手架的 preflight 会（有意地）在缺身份时报错。
+	// 用环境变量给整个测试进程一个身份，fixture 仓库和被测的 git 子进程都能继承到。
+	t.Setenv("GIT_AUTHOR_NAME", "create-base test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "create-base test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+
 	repoRoot, err := exec.Command("git", "rev-parse", "--show-toplevel").Output()
 	if err != nil {
 		t.Skip("不在 git 仓库内")
@@ -117,10 +124,6 @@ func fixtureBase(t *testing.T) string {
 		}
 	}
 
-	env := append(os.Environ(),
-		"GIT_AUTHOR_NAME=t", "GIT_AUTHOR_EMAIL=t@example.com",
-		"GIT_COMMITTER_NAME=t", "GIT_COMMITTER_EMAIL=t@example.com",
-	)
 	for _, args := range [][]string{
 		{"init", "-b", "main"},
 		{"add", "-A"},
@@ -129,7 +132,6 @@ func fixtureBase(t *testing.T) string {
 	} {
 		cmd := exec.Command("git", args...)
 		cmd.Dir = dir
-		cmd.Env = env
 		if out, err := cmd.CombinedOutput(); err != nil {
 			t.Fatalf("git %v: %v\n%s", args, err, out)
 		}
