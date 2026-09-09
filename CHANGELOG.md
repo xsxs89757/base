@@ -8,6 +8,17 @@
 
 ## [Unreleased]
 
+### 修复
+
+- CI 的「脚手架 vet & test」加 `if: github.repository == 'xsxs89757/base'`，
+  与 hooks-guard 同一条件。`tools/create-base` 的 `scaffold_test.go` 里
+  `fixtureBase()` 会把**当前仓库自己的文件**（含 `admin/apps/web-antd/.env`）
+  拷成一份假基底再跑一遍脚手架，其中一步要把 `VITE_APP_TITLE=Admin` 替换成
+  新项目名。这个耦合在基底本体是有意的——它正是用来发现「改了模板却忘了改
+  脚手架」；但下游按约定必须改掉那个值（见 CLAUDE.md「新项目初始化」），
+  于是替换匹配到 0 处，**这一步在任何下游仓库都是必然失败**，且与下游自己的
+  代码无关。下游同步后 CI 才能真正变绿。
+
 ## [2.0.1] - 2026-09-02
 
 对 v2.0.0 的评审修复，全是工程细节，接口和数据结构没动。

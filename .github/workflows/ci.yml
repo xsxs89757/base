@@ -52,7 +52,15 @@ jobs:
         working-directory: server
         run: CGO_ENABLED=0 go build -o /dev/null .
 
+      # 只在基底本体跑。create-base 的 scaffold_test.go 里 fixtureBase() 会把
+      # **当前仓库自己的文件**（含 admin/apps/web-antd/.env）拷成一份假基底再跑
+      # 一遍脚手架，其中一步要把 VITE_APP_TITLE=Admin 替换成新项目名。这个耦合
+      # 是有意的——它正是用来发现"改了基底模板却忘了改脚手架"。但下游按约定必须
+      # 改掉那个值（见 CLAUDE.md「新项目初始化」：同域名下多个后台共用 namespace
+      # 会互相覆盖登录态），于是替换匹配到 0 处，这一步在**任何下游仓库都是必然
+      # 失败**，且与下游自己的代码无关。条件与上面的 hooks-guard 同理。
       - name: 脚手架 vet & test
+        if: github.repository == 'xsxs89757/base'
         working-directory: tools/create-base
         run: go vet ./... && go test ./...
 
