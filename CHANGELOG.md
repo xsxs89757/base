@@ -8,6 +8,11 @@
 
 ## [Unreleased]
 
+## [2.0.2] - 2026-09-14
+
+修下游 CI 必然失败、操作日志在 MySQL 上丢上传记录、`/admin` 中间件被重复挂载，钉 base-kit v1.0.4；
+接口和数据结构没动。
+
 ### 修复
 
 - CI 的「脚手架 vet & test」加 `if: github.repository == 'xsxs89757/base'`，
