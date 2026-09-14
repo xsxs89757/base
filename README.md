@@ -460,14 +460,27 @@ make base-version                  # 查看当前已合入版本与远端最新�
 - **super** 角色和 id=1 的内置超管绕过全部权限判定，且不能被普通管理员修改/删除；
 - **admin** 角色：种子默认拥有系统管理全部菜单；**user** 角色：仅基础查看。
 
-下游项目给自己的路由登记权限码（写在 `server/internal/router/project.go`）：
+下游项目在 `server/internal/router/project.go` 里注册路由、登记权限码。`/admin` 下的路由直接注册，
+**不要再挂** `JWTAuth` / `PermissionAuth` / `OperationLog`：
 
 ```go
-middleware.RegisterRoutePermissions(
-    middleware.RoutePermission{Method: "GET", Path: "/admin/shop/order/list", Code: "Shop:Order:List"},
-    middleware.RoutePermission{Method: "PUT", Path: "/admin/shop/order/:id", Code: "Shop:Order:Edit"},
-)
+func SetupProject(app *fiber.App) {
+    g := app.Group("/admin/shop") // 不要写成 app.Group("/admin/shop", middleware.JWTAuth(), ...)
+    g.Get("/order/list", shop.ListOrders)
+    g.Put("/order/:id", shop.UpdateOrder)
+
+    middleware.RegisterRoutePermissions(
+        middleware.RoutePermission{Method: "GET", Path: "/admin/shop/order/list", Code: "Shop:Order:List"},
+        middleware.RoutePermission{Method: "PUT", Path: "/admin/shop/order/:id", Code: "Shop:Order:Edit"},
+    )
+}
 ```
+
+kit 把这三个中间件挂在 `/admin` 前缀上，之后注册的 `/admin/*` 路由自动鉴权、校验权限码、记操作日志。
+`project.go` 注释里「参考 admin.go 中 protected 分组的中间件挂法」是错的（挂载点冻结，注释没改）：照做在
+base-kit v1.0.3 及之前会让每个写操作记两条操作日志，鉴权和权限码也各跑两遍。`/api` 等其他前缀，以及
+`basekit.Options.PreRoutes` 里覆盖 kit 接口的路由不经过这些中间件，需要时自己挂——`PreRoutes` 排在它们前面，
+不挂就不用登录。
 
 只需登录、不校验权限码的路由用 `middleware.RegisterAuthenticatedRoutes`。`middleware.CasbinAuth()` 是 `PermissionAuth()` 的旧名，仍可使用。
 

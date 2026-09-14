@@ -19,6 +19,25 @@
   于是替换匹配到 0 处，**这一步在任何下游仓库都是必然失败**，且与下游自己的
   代码无关。下游同步后 CI 才能真正变绿。
 
+### 文档
+
+- 下游 `/admin` 路由不要再挂 `JWTAuth` / `PermissionAuth` / `OperationLog`。kit 把这三个中间件挂在 `/admin`
+  前缀上，`router/project.go` 里注册的 `/admin/*` 路由本来就经过它们；而该文件的注释让人「参考 admin.go 中
+  protected 分组的中间件挂法」，照做每个 POST/PUT/DELETE 记两条操作日志，鉴权和权限码也各跑两遍。
+  这条注释从挂载点引入起就是错的（当时 `Setup` 同样先调 `SetupAdmin`），不只是 2.0.1「已知」里说的路径过时。
+  挂载点冻结，注释不改，以 README「权限说明」和 CLAUDE.md / AGENTS.md 为准，那里写明了哪些路由已经挂好、
+  哪些要自己挂（`/api` 等其他前缀；`PreRoutes` 覆盖 kit 的接口，它排在 kit 的中间件前面，不挂就不用登录）。
+- base-kit 同步修复（见其 CHANGELOG 的 Unreleased）：三个中间件同一请求只生效一次。模板钉上含这个修复的
+  kit 版本后，已经重复挂载的下游不改代码也只记一条。
+
+### 升级步骤
+
+- 检查 `server/internal/router/project.go`：`/admin` 下的分组或路由上挂了 `JWTAuth()` / `PermissionAuth()` /
+  `OperationLog()` 的，删掉这几个中间件（`RegisterRoutePermissions` / `RegisterAuthenticatedRoutes` 的登记保留）。
+  已经写进 `sys_operation_logs` 的重复记录不会自动清理。
+- 在 `main.go` 里用 `PreRoutes` 覆盖过 kit 接口的，确认覆盖的路由自己挂了 `JWTAuth()` / `PermissionAuth()`，
+  写操作再加 `OperationLog()`。
+
 ## [2.0.1] - 2026-09-02
 
 对 v2.0.0 的评审修复，全是工程细节，接口和数据结构没动。

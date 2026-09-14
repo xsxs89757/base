@@ -50,7 +50,7 @@ git push -u origin main
 
 kit 提供的扩展点（够用就别 fork）：
 
-- 加接口：`basekit.Options.Routes`（业务路由）；**覆盖 kit 的某个接口**用 `PreRoutes`，Fiber 先注册先匹配。
+- 加接口：`basekit.Options.Routes`（业务路由）；**覆盖 kit 的某个接口**用 `PreRoutes`，Fiber 先注册先匹配。`PreRoutes` 排在 kit 的 `/admin` 中间件前面，覆盖的接口要自己挂 `JWTAuth` / `PermissionAuth` / `OperationLog`，否则不用登录就能调。
 - 加模型/种子：`Options.Models` / `Options.Seed`，也就是两个挂载点文件。
 - 给基底表加列：扩展结构**只声明表名、主键和新列**，登记到 `Options.Models`。不要嵌入 `adminmodel.User`——嵌入会把 `Roles` many2many 带过来，往共享的 `user_roles` 加一列 `<结构名>_id`，通过嵌入结构写入时 `user_id` 为 NULL，kit 按 `user_id` 查角色会静默失效（kit 的 `store/embed_test.go` 锁定了这个约束）。
 - 读自己的配置段：`config.LoadExtra(&myCfg)`。
@@ -71,7 +71,7 @@ kit 提供的扩展点（够用就别 fork）：
 
 **四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突。这个承诺由 `make check-hooks`（`scripts/check-hooks.sh`，按 blob id 冻结）在基底 CI 中强制：
 
-- `server/internal/router/project.go`：注册下游业务路由；需要权限码的路由用 `middleware.RegisterRoutePermissions` 登记（示例见 `middleware/permission.go` 中该函数的注释与 README「权限说明」），只需登录的用 `RegisterAuthenticatedRoutes`。
+- `server/internal/router/project.go`：注册下游业务路由；`/admin` 下的路由**不要再挂** JWT/权限码/操作日志中间件（文件注释里「参考 admin.go 中 protected 分组的中间件挂法」是错的，照做每个写操作记两条日志，见「公共层」）；需要权限码的路由用 `middleware.RegisterRoutePermissions` 登记（示例见 kit 的 `middleware/permission.go` 中该函数的注释与 README「权限说明」），只需登录的用 `RegisterAuthenticatedRoutes`。
 - `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
 - `dev.project.sh`（仓库根，可选）：`./dev.sh` 自动加载，挂载额外本地开发服务。实现 `project_dev_start` / `project_dev_stop` / `project_dev_info` 三个函数，端口用脚本提供的 `resolve_port` 解析（自动处理占用与 `--force`）。
 - `deploy.project.sh`（仓库根，可选）：`./deploy.sh` 自动加载，挂载额外部署目标。声明 `PROJECT_DEPLOY_TARGETS="xxx ..."` 并实现 `project_deploy_<目标>` 函数；扩展目标可单独部署（`./deploy.sh <目标>`），`all` 模式在 server/admin 之后一并执行，可复用 `ssh_run` / `scp_to` / `ensure_systemd_unit` / `restart_remote_service` 等助手。
@@ -125,7 +125,7 @@ kit 提供的扩展点（够用就别 fork）：
 | 改框架层的 bug / 加通用能力 | kit 仓库（本地 `../base-kit`），发版后 `go get ...@latest` |
 | 同时改 kit 和模板 | `make kit-dev` 生成 `server/go.work` 直接编译本地 kit 源码，改完 `make kit-undev` |
 | 加业务接口 | `server/internal/` 新增文件 + `router/project.go` 注册 |
-| 覆盖 kit 的某个接口 | `main.go` 里用 `basekit.Options.PreRoutes` 注册同路径 |
+| 覆盖 kit 的某个接口 | `main.go` 里用 `basekit.Options.PreRoutes` 注册同路径，并自己挂 `JWTAuth` / `PermissionAuth` / `OperationLog` |
 | 给 sys_users 等基底表加列 | 扩展结构只声明表名/主键/新列，登记到 `Options.Models`（**不要嵌入 kit 的模型**） |
 
 `server/go.work` 已 gitignore，`deploy.sh` 用 `GOWORK=off` 编译，发布永远按 `go.mod` 钉死的 kit 版本。
@@ -149,7 +149,7 @@ kit 提供的扩展点（够用就别 fork）：
 公共层：
 
 - 统一响应在 kit 的 `dto` 包：`dto.Success`、`dto.PageSuccess`、`dto.Fail`、`dto.ParsePage`。
-- 中间件在 kit 的 `middleware` 包：JWT、权限码（`PermissionAuth`）、操作日志。`JWTAuth` 每个请求以数据库为准核对用户状态与启用角色（进程内缓存 1 分钟），改用户/角色/密码时必须调 `middleware.InvalidateUserAuthCache`；角色/菜单变更调 `InvalidatePermissionCache`。
+- 中间件在 kit 的 `middleware` 包：JWT、权限码（`PermissionAuth`）、操作日志。kit 把这三个挂在 `/admin` **前缀**上，之后注册的 `/admin/*` 路由（含 `project.go` 里的）自动鉴权、校验权限码、记操作日志，**不要再挂一遍**——base-kit v1.0.3 及之前重复挂会让每个写操作记两条日志、鉴权跑两遍；`/api` 等其他前缀和 `PreRoutes` 里的路由不经过它们，需要时自己挂。`JWTAuth` 每个请求以数据库为准核对用户状态与启用角色（进程内缓存 1 分钟），改用户/角色/密码时必须调 `middleware.InvalidateUserAuthCache`；角色/菜单变更调 `InvalidatePermissionCache`。
 - 数据层在 kit 的 `store` 包（`store.DB`、`store.IsUniqueViolation`、种子助手）；模板的 `internal/store` 只是把两个挂载点接给 kit 的垫片。
 
 ### API 和响应
@@ -157,7 +157,7 @@ kit 提供的扩展点（够用就别 fork）：
 - Handler 返回统一响应格式，不直接拼零散 JSON。
 - 列表接口使用分页结构：`items` + `total`。
 - 管理端业务接口放在 `/admin` 前缀下；公共前台 API 才放 `/api`。
-- 新增、修改、删除管理端接口必须确认 JWT、权限码（用 `middleware.RegisterRoutePermissions` 登记，未登记的 `/admin` 路由对非 super 一律 403）和操作日志是否应该覆盖。
+- 新增、修改、删除管理端接口：`/admin` 下自动带 JWT、权限码校验和操作日志（记 POST/PUT/DELETE），不要再挂中间件；必须用 `middleware.RegisterRoutePermissions` 登记权限码（未登记的 `/admin` 路由对非 super 一律 403）。
 - id=1 的用户是超级管理员：不受普通权限限制，不出现在普通用户列表，不允许被修改或删除。持有 `super` 角色的用户同样受保护：非 super 操作者不得修改/删除，也不能把 super 角色分配出去。
 
 ### Swagger
