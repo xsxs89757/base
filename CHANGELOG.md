@@ -19,6 +19,17 @@
   于是替换匹配到 0 处，**这一步在任何下游仓库都是必然失败**，且与下游自己的
   代码无关。下游同步后 CI 才能真正变绿。
 
+### 变更
+
+- 钉 base-kit v1.0.4：
+  - **操作日志在 MySQL / PostgreSQL 上记得下文件上传了**。之前上传请求的二进制请求体原样写进 `body` 列，
+    utf8mb4 列（严格模式）拒绝整条 INSERT（`Error 1366`），这条日志静默丢失；SQLite 不校验编码，本地看不出来。
+    超过 2KB 的中文请求（按字节截断切开汉字）、超长 path / User-Agent（`Error 1406`）同样会丢。
+    上传请求的 `body` 现在是表单摘要：普通字段照录（敏感字段脱敏），文件只记文件名、大小和类型。
+  - 并发时操作日志的 method / path / User-Agent 可能记成别的请求（条目引用了 Fiber 会复用的缓冲区），已修复。
+  - `JWTAuth` / `PermissionAuth` / `OperationLog` 同一请求只生效一次：已经在 `/admin` 下重复挂载的下游
+    不改代码也只记一条，鉴权和权限码也只判一次。
+
 ### 文档
 
 - 下游 `/admin` 路由不要再挂 `JWTAuth` / `PermissionAuth` / `OperationLog`。kit 把这三个中间件挂在 `/admin`
@@ -27,11 +38,12 @@
   这条注释从挂载点引入起就是错的（当时 `Setup` 同样先调 `SetupAdmin`），不只是 2.0.1「已知」里说的路径过时。
   挂载点冻结，注释不改，以 README「权限说明」和 CLAUDE.md / AGENTS.md 为准，那里写明了哪些路由已经挂好、
   哪些要自己挂（`/api` 等其他前缀；`PreRoutes` 覆盖 kit 的接口，它排在 kit 的中间件前面，不挂就不用登录）。
-- base-kit 同步修复（见其 CHANGELOG 的 Unreleased）：三个中间件同一请求只生效一次。模板钉上含这个修复的
-  kit 版本后，已经重复挂载的下游不改代码也只记一条。
 
 ### 升级步骤
 
+- `make sync-base` 带来 `server/go.mod` 里的 base-kit v1.0.4。暂时不同步基底、只想先拿 kit 的修复：
+  `cd server && go get github.com/xsxs89757/base-kit@v1.0.4`。
+- 有程序按原文解析操作日志 `body` 的：上传（multipart）请求的 `body` 变成了 JSON 摘要，不再是原始请求体。
 - 检查 `server/internal/router/project.go`：`/admin` 下的分组或路由上挂了 `JWTAuth()` / `PermissionAuth()` /
   `OperationLog()` 的，删掉这几个中间件（`RegisterRoutePermissions` / `RegisterAuthenticatedRoutes` 的登记保留）。
   已经写进 `sys_operation_logs` 的重复记录不会自动清理。
