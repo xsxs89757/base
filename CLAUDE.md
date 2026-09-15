@@ -54,6 +54,7 @@ kit 提供的扩展点（够用就别 fork）：
 - 加模型/种子：`Options.Models` / `Options.Seed`，也就是两个挂载点文件。
 - 给基底表加列：扩展结构**只声明表名、主键和新列**，登记到 `Options.Models`。不要嵌入 `adminmodel.User`——嵌入会把 `Roles` many2many 带过来，往共享的 `user_roles` 加一列 `<结构名>_id`，通过嵌入结构写入时 `user_id` 为 NULL，kit 按 `user_id` 查角色会静默失效（kit 的 `store/embed_test.go` 锁定了这个约束）。
 - 读自己的配置段：`config.LoadExtra(&myCfg)`。
+- 起常驻后台任务（投递 worker、定时扫描）：在 `Routes` 里用 `basekit.Go(app, fn)`，**不要** `go fn(context.Background())`。`app.Shutdown()` 时 ctx 取消并等任务返回；Background 起的任务永远不停，`store.DB` 又是包级变量，测试里每次 `NewApp` 都叠一份并转去读写新库（下游真实案例：回调 worker 叠了 7 份，每条回调发两遍，CI 时好时坏）。只要 ctx 时用 `basekit.AppContext(app)`。
 
 **仍需谨慎修改的核心文件：**
 
@@ -127,6 +128,7 @@ kit 提供的扩展点（够用就别 fork）：
 | 加业务接口 | `server/internal/` 新增文件 + `router/project.go` 注册 |
 | 覆盖 kit 的某个接口 | `main.go` 里用 `basekit.Options.PreRoutes` 注册同路径，并自己挂 `JWTAuth` / `PermissionAuth` / `OperationLog` |
 | 给 sys_users 等基底表加列 | 扩展结构只声明表名/主键/新列，登记到 `Options.Models`（**不要嵌入 kit 的模型**） |
+| 起常驻后台任务（worker、定时扫描） | `Routes` 里 `basekit.Go(app, fn)`，随 `app.Shutdown()` 停止（**不要** `context.Background()`） |
 
 `server/go.work` 已 gitignore，`deploy.sh` 用 `GOWORK=off` 编译，发布永远按 `go.mod` 钉死的 kit 版本。
 
