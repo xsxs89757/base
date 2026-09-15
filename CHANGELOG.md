@@ -8,6 +8,41 @@
 
 ## [Unreleased]
 
+## [2.1.0] - 2026-09-15
+
+钉 base-kit v1.1.0（新增 `basekit.Go`：后台任务随 app 关闭而停止），去掉 CI 上每次都有的两条注解；
+接口和数据结构没动。
+
+### 新增
+
+- 钉 base-kit v1.1.0：`basekit.Go(app, fn)` 在 `Routes` 里起常驻后台任务（投递 worker、定时扫描），
+  `app.Shutdown()` 时 ctx 取消并等任务返回；`basekit.AppContext(app)` 只取这个 ctx。
+  用 `go fn(context.Background())` 起的任务永远不停，而 kit 的 `store.DB` 是包级变量：测试里一个包先后
+  `NewApp` 好几次，前面 app 的任务不会退出，而是转去读写新 app 的库，同一个 worker 同时跑好几份。
+  下游真实案例：7 个 e2e 测试各 `NewApp` 一次，回调投递 worker 叠了 7 份，同一条回调发两遍，
+  CI 报「逐项回调 8 条，期望 4 条」，时好时坏。CLAUDE.md / AGENTS.md 补了这条约定。
+  kit 顺带修了多次 `NewApp` 时 `go test -race` 偶发报的数据竞争。
+
+### 修复
+
+- 前端 CI 每次都有一条红色注解 `error TS4058: Return type of exported function has or is using name 'Props'`，
+  job 其实是绿的，但在通知邮件和运行页上看着像前端挂了。来源是 vben 自带的 `@vben-core/tabs-ui`：
+  `use-tabs-view-scroll.ts` 把 `scrollbarRef` 声明成 `InstanceType<typeof VbenScrollbar>`，构建生成 `.d.ts`
+  时要引用 scrollbar.vue 里没导出的 `Props`，报错后退化成 `any`；`setup-node` 自带的 tsc 匹配规则把这行
+  输出变成了注解。改成 `ComponentPublicInstance`（只用到 `$el`）。vben 上游同一处代码没修。
+- CI 的 actions 升到 Node 24 版本（checkout / setup-go / setup-node v7，pnpm/action-setup v5），
+  去掉每个 job 都有的「Node.js 20 is deprecated」警告。
+
+### 升级步骤
+
+- `make sync-base` 带来 `server/go.mod` 里的 base-kit v1.1.0。暂不同步基底、只想先拿 kit：
+  `cd server && go get github.com/xsxs89757/base-kit@v1.1.0`。
+- 查一遍 `Routes` 调用链里起的常驻 goroutine（`grep -rnE '^\s+go ' server/internal`），ctx 来自
+  `context.Background()` 的改成 `basekit.Go`：签名是 `func(ctx context.Context)` 的直接传
+  （`basekit.Go(app, worker.Run)`），其余包一层闭包。测试里 `t.Cleanup(func() { _ = app.Shutdown() })`
+  要在关库的 cleanup **之后**注册（后注册的先执行），Shutdown 等任务退完再关库。
+- 改过 `.github/workflows/ci.yml` 的下游，同步时这个文件大概率冲突：保留自己加的步骤，actions 版本取基底的。
+
 ## [2.0.2] - 2026-09-14
 
 修下游 CI 必然失败、操作日志在 MySQL 上丢上传记录、`/admin` 中间件被重复挂载，钉 base-kit v1.0.4；
