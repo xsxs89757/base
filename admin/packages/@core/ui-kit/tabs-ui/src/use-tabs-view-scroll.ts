@@ -1,8 +1,8 @@
+import type { ComponentPublicInstance } from 'vue';
+
 import type { TabsProps } from './types';
 
 import { nextTick, onMounted, onUnmounted, ref, watch } from 'vue';
-
-import { VbenScrollbar } from '@vben-core/shadcn-ui';
 
 import { useDebounceFn } from '@vueuse/core';
 
@@ -12,7 +12,9 @@ export function useTabsViewScroll(props: TabsProps) {
   let resizeObserver: null | ResizeObserver = null;
   let mutationObserver: MutationObserver | null = null;
   let tabItemCount = 0;
-  const scrollbarRef = ref<InstanceType<typeof VbenScrollbar> | null>(null);
+  // 只用到 $el。写成 InstanceType<typeof VbenScrollbar> 的话，构建生成 .d.ts 时要引用
+  // scrollbar.vue 里没导出的 Props，报 TS4058（不致命，但 CI 上是一条红色注解）
+  const scrollbarRef = ref<ComponentPublicInstance | null>(null);
   const scrollViewportEl = ref<DomElement>(null);
   const showScrollButton = ref(false);
   const scrollIsAtLeft = ref(true);
