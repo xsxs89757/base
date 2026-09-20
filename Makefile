@@ -18,7 +18,12 @@ ifeq ($(FORCE),1)
 DEV_FLAGS += --force
 endif
 
+# 下游挂载点：基底永不提供 Makefile.project，下游在其中写自己的目标，同步永不冲突。
+# 目标带 `## 说明` 注释就会出现在 make help 里；PROJECT_CHECKS 里列出的目标会并入 make check。
+-include Makefile.project
+
 .PHONY: help dev dev-force force-dev release publish release-server publish-server release-admin publish-admin build build-server build-admin test test-server swagger sync-base check-hooks base-check base-release base-version new migrate-kit kit-dev kit-undev
+.PHONY: check check-backend check-frontend check-scripts typecheck hooks
 
 help:
 	@echo "Admin 管理系统快捷命令"
@@ -55,9 +60,17 @@ help:
 	@echo "  make kit-undev        改回按 go.mod 钉死的版本"
 	@echo ""
 	@echo "验证/构建:"
+	@echo "  make check            跑一遍 CI 的全部检查 (后端 + 前端 + 脚本)"
+	@echo "  make check-backend    仅后端 (vet/test/交叉编译/Swagger)"
+	@echo "  make check-frontend   仅前端 (类型检查 + 构建)"
+	@echo "  make typecheck        仅前端类型检查 (最快)"
+	@echo "  make hooks            启用 .githooks (push 前自动按改动路径检查)"
 	@echo "  make test             运行后端测试"
 	@echo "  make build            构建后端和前端"
 	@echo "  make swagger          重新生成 Swagger 文档"
+	@[ ! -f Makefile.project ] || { echo ""; echo "项目自有目标 (Makefile.project):"; \
+		grep -hE '^[a-zA-Z0-9_-]+:.*## ' Makefile.project | \
+		awk -F':.*## ' '{printf "  make %-18s %s\n", $$1, $$2}'; }
 
 dev:
 	@./dev.sh $(DEV_FLAGS)
@@ -98,6 +111,32 @@ kit-dev:
 kit-undev:
 	@rm -f server/go.work server/go.work.sum
 	@cd server && go list -m -f '  base-kit 现在解析到 {{.Dir}}' github.com/xsxs89757/base-kit
+
+# ---------------------------------------------------------------------------
+# 校验：这些只是 scripts/check.sh 的转发，CI 与 pre-push 钩子调的是同一份逻辑。
+# 改检查内容请改 scripts/check.sh，不要在这里加命令。
+# ---------------------------------------------------------------------------
+
+check:
+	@bash scripts/check.sh all
+	@[ -z "$(PROJECT_CHECKS)" ] || $(MAKE) --no-print-directory $(PROJECT_CHECKS)
+
+check-backend:
+	@bash scripts/check.sh backend
+
+check-frontend:
+	@bash scripts/check.sh frontend
+
+check-scripts:
+	@bash scripts/check.sh scripts
+
+typecheck:
+	@bash scripts/check.sh frontend --fast
+
+# 启用 pre-push 钩子。dev.sh 启动时也会自动调用（仅在未设置 core.hooksPath 时）。
+hooks:
+	@git config core.hooksPath .githooks
+	@echo "已启用 .githooks（关闭: git config --unset core.hooksPath）"
 
 build: build-server build-admin
 
@@ -160,18 +199,10 @@ base-version:
 check-hooks:
 	@bash scripts/check-hooks.sh
 
-base-check: check-hooks
-	@echo "==> 后端 vet / test / 交叉编译"
-	@# GOWORK=off 全程：本地 make kit-dev 留下的 go.work 会让检查按本地 kit 源码跑，
-	@# 而发布（deploy.sh）永远按 go.mod 钉死的版本，两者必须一致才有意义
-	@cd server && GOWORK=off go vet ./... && GOWORK=off go test ./... && CGO_ENABLED=0 GOWORK=off go build -o /dev/null .
-	@echo "==> 脚手架 vet / test"
-	@cd tools/create-base && go vet ./... && go test ./...
-	@echo "==> 脚本语法"
-	@for f in dev.sh deploy.sh scripts/check-hooks.sh; do bash -n "$$f" || exit 1; done
-	@echo "==> Swagger 文档时效"
-	@GOWORK=off $(MAKE) --no-print-directory swagger >/dev/null 2>&1
-	@git diff --quiet -- server/docs || { echo "server/docs 已过期：make swagger 后提交生成物再发布"; exit 1; }
+# 发布前全量检查 = 所有人都跑的 check + 只有基底本体才有意义的那部分
+base-check:
+	@bash scripts/check.sh all
+	@bash scripts/check.sh base
 	@echo "==> base-check 通过"
 
 base-release:

@@ -1,0 +1,11 @@
+#!/usr/bin/env bash
+# push 前按改动路径跑对应的检查，把 CI 的红灯挡在本地。
+# 逻辑全在 scripts/check.sh 里（钩子文件本身几乎不用再改）。
+#
+# 跳过方式（三选一）:
+#   git push --no-verify
+#   BASE_SKIP_HOOKS=1 git push
+#   git config base.prepush off     # 永久关闭；fast=默认档, full=前端也跑构建
+#
+# 启用: make hooks  （或 git config core.hooksPath .githooks）
+exec bash "$(git rev-parse --show-toplevel)/scripts/check.sh" pre-push "$@"
