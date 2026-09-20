@@ -14,16 +14,15 @@ VERSION ?=
 # swag 钉死版本：本地与 CI 必须用同一版本，否则 docs 一致性检查会误报
 SWAG := go run github.com/swaggo/swag/cmd/swag@v1.16.6
 
-ifeq ($(FORCE),1)
-DEV_FLAGS += --force
-endif
-
 # 下游挂载点：基底永不提供 Makefile.project，下游在其中写自己的目标，同步永不冲突。
 # 目标带 `## 说明` 注释就会出现在 make help 里；PROJECT_CHECKS 里列出的目标会并入 make check。
 -include Makefile.project
 
+ifeq ($(FORCE),1)
+DEV_FLAGS += --force
+endif
+
 .PHONY: help dev dev-force force-dev release publish release-server publish-server release-admin publish-admin build build-server build-admin test test-server swagger sync-base check-hooks base-check base-release base-version new migrate-kit kit-dev kit-undev
-.PHONY: check check-backend check-frontend check-scripts typecheck hooks
 
 help:
 	@echo "Admin 管理系统快捷命令"
@@ -116,6 +115,7 @@ kit-undev:
 # 校验：这些只是 scripts/check.sh 的转发，CI 与 pre-push 钩子调的是同一份逻辑。
 # 改检查内容请改 scripts/check.sh，不要在这里加命令。
 # ---------------------------------------------------------------------------
+.PHONY: check check-backend check-frontend check-scripts typecheck hooks
 
 check:
 	@bash scripts/check.sh all
