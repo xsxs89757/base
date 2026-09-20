@@ -23,12 +23,15 @@ jobs:
   # 组织限制了 "Allow select actions" 导致远程调用被拒时，把下面这行换成
   # uses: ./.github/workflows/checks.yml （该文件本来就随 merge 继承了）。
   checks:
-    if: github.repository != 'xsxs89757/base'
+    # 临时测试分支：反转判断，验证下游走的远程调用路径
+    if: github.repository == 'xsxs89757/base'
     uses: xsxs89757/base/.github/workflows/checks.yml@ci-v1
+    with:
+      all: true
 
   # 基底本体：调用本提交里的 checks.yml，先在自己身上验证过，再前移 ci-v1 给下游。
   checks-base:
-    if: github.repository == 'xsxs89757/base'
+    if: false
     uses: ./.github/workflows/checks.yml
     with:
       all: true
