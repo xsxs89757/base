@@ -219,10 +219,12 @@ base-version:
 check-hooks:
 	@bash scripts/check-hooks.sh
 
-# 发布前全量检查 = 所有人都跑的 check + 只有基底本体才有意义的那部分
+# 发布前全量检查 = 只有基底本体才有意义的那部分 + 所有人都跑的 check
+# base 放前面：它会在下游直接拒绝，省得下游误跑时先花几分钟跑完前端才看到提示；
+# 在基底本体它也只要一两秒，挂载点被改动能最快反馈。
 base-check:
-	@bash scripts/check.sh all
 	@bash scripts/check.sh base
+	@bash scripts/check.sh all
 	@echo "==> base-check 通过"
 
 base-release:
