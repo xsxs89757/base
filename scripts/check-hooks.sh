@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # 基底挂载点冻结校验。
 #
-# CLAUDE.md 承诺「四个下游挂载点，基底承诺永不修改」——下游把自己的路由/模型/脚本
-# 写在这些文件里，基底一旦改动，所有下游 make sync-base 时都会撞冲突。这个脚本把
-# 承诺变成可执行的检查：两个 Go 挂载点按 blob id 冻结，两个脚本挂载点必须不存在。
+# AGENTS.md 承诺「下游挂载点，基底承诺永不修改」——下游把自己的路由/模型/脚本/
+# CI job 写在这些文件里，基底一旦改动，所有下游 make sync-base 时都会撞冲突。这个
+# 脚本把承诺变成可执行的检查：两个 Go 挂载点按 blob id 冻结，其余挂载点必须不存在
+# （它们由下游按需新增：dev/deploy 扩展、Makefile 自有目标、CI 自有 job）。
 #
 # 只在基底仓库本体生效（origin 指向 xsxs89757/base）；下游可以随意修改挂载点，
 # 继承到这个脚本时自动跳过。
@@ -24,7 +25,7 @@ fi
 # 与 FROZEN_FILES 同序
 FROZEN_FILES="server/internal/router/project.go server/internal/store/project.go"
 FROZEN_BLOBS="d1e2419f95412b781b7b04c04cc9de191d260a65 c4ff7a92fa16fce68eede1eeae81643c22d05be5"
-ABSENT_FILES="dev.project.sh deploy.project.sh"
+ABSENT_FILES="dev.project.sh deploy.project.sh Makefile.project .github/workflows/project.yml"
 
 fail=0
 i=1

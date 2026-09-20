@@ -229,7 +229,14 @@ base-release:
 	else \
 		echo "==> tools/create-base 无变化，不打脚手架标签（go run @latest 仍解析到 $$last）"; \
 	fi; \
-	git push --atomic origin main "refs/tags/$(VERSION)" $$tool_tag
+	ci_tag=""; \
+	if ! git rev-parse -q --verify refs/tags/ci-v1 >/dev/null || \
+	   ! git diff --quiet ci-v1 HEAD -- .github/workflows/checks.yml; then \
+		git tag -f ci-v1 -m "checks.yml for downstream @ $(VERSION)"; \
+		ci_tag="+refs/tags/ci-v1"; \
+		echo "==> 已前移 ci-v1（下游的 ci.yml 立即用上新的 checks.yml）"; \
+	fi; \
+	git push --atomic origin main "refs/tags/$(VERSION)" $$tool_tag $$ci_tag
 	@echo "==> 已发布 $(VERSION)"
 
 NEW_DIR ?= ../$(NAME)

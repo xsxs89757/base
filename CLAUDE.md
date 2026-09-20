@@ -70,12 +70,44 @@ kit 提供的扩展点（够用就别 fork）：
 - 后端业务代码：在 `server/internal/` 下按 model/dto/service/handler/validator 分层新增文件，路由注册在 `router/project.go`。
 - `server/go.mod` / `go.sum` 新增依赖：下游按业务需要 `go get` 即可（module 名不动就行）；sync-base 冲突时保留双方依赖行、跑一次 `go mod tidy`。前端 `package.json` 加依赖同理。
 
-**四个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；脚本挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突。这个承诺由 `make check-hooks`（`scripts/check-hooks.sh`，按 blob id 冻结）在基底 CI 中强制：
+**六个下游挂载点，基底承诺永不修改**（Go 挂载点在基底中保持空实现；其余挂载点基底不包含、由下游按需新增），下游可任意编辑且同步永不冲突。这个承诺由 `make check-hooks`（`scripts/check-hooks.sh`，按 blob id 冻结）在基底 CI 中强制：
 
-- `server/internal/router/project.go`：注册下游业务路由；`/admin` 下的路由**不要再挂** JWT/权限码/操作日志中间件（文件注释里「参考 admin.go 中 protected 分组的中间件挂法」是错的，照做每个写操作记两条日志，见「公共层」）；需要权限码的路由用 `middleware.RegisterRoutePermissions` 登记（示例见 kit 的 `middleware/permission.go` 中该函数的注释与 README「权限说明」），只需登录的用 `RegisterAuthenticatedRoutes`。
+- `server/internal/router/project.go`：注册下游业务路由；`/admin` 下的路由**不要再挂** JWT/权限码/操作日志中间件（照做每个写操作记两条日志，见「公共层」）；需要权限码的路由用 `middleware.RegisterRoutePermissions` 登记（示例见 kit 的 `middleware/permission.go` 中该函数的注释与 README「权限说明」），只需登录的用 `RegisterAuthenticatedRoutes`。
 - `server/internal/store/project.go`：登记下游模型（并入 AutoMigrate）与业务种子数据。
 - `dev.project.sh`（仓库根，可选）：`./dev.sh` 自动加载，挂载额外本地开发服务。实现 `project_dev_start` / `project_dev_stop` / `project_dev_info` 三个函数，端口用脚本提供的 `resolve_port` 解析（自动处理占用与 `--force`）。
 - `deploy.project.sh`（仓库根，可选）：`./deploy.sh` 自动加载，挂载额外部署目标。声明 `PROJECT_DEPLOY_TARGETS="xxx ..."` 并实现 `project_deploy_<目标>` 函数；扩展目标可单独部署（`./deploy.sh <目标>`），`all` 模式在 server/admin 之后一并执行，可复用 `ssh_run` / `scp_to` / `ensure_systemd_unit` / `restart_remote_service` 等助手。
+- `Makefile.project`（仓库根，可选）：`Makefile` 用 `-include` 加载。下游自己的 make 目标写这里，**不要再往 Makefile 本体加**（两边都在文件末尾追加必冲突）。目标带 `## 说明` 注释会自动出现在 `make help`；把目标名写进 `PROJECT_CHECKS` 就会并入 `make check`：
+
+  ```make
+  PROJECT_CHECKS = check-agent
+  check-agent:  ## 编译边缘 Agent
+  	@cd agent && go build ./...
+  ```
+
+- `.github/workflows/project.yml`（可选）：下游自己的 CI job 写这里，**不要再改 `ci.yml`**——它现在只是一层薄调用，改了就会每次同步都冲突。自带工具链准备，不要从 ci.yml 引用：
+
+  ```yaml
+  name: project
+  on: { push: { branches: [main] }, pull_request: }
+  jobs:
+    agent:
+      runs-on: ubuntu-latest
+      steps:
+        - uses: actions/checkout@v7
+        - uses: actions/setup-go@v7
+          with: { go-version-file: server/go.mod, cache-dependency-path: server/go.sum }
+        - run: make check-agent
+  ```
+
+### CI 怎么跑的
+
+`ci.yml` 只做分发：下游调用基底发布的 `xsxs89757/base/.github/workflows/checks.yml@ci-v1`，基底本体调用本提交里的同一个文件。好处是**修 CI 不再需要下游先 `make sync-base`**——基底改完 `checks.yml` 并前移 `ci-v1`，所有下游下一次推送就用上了。
+
+`checks.yml` 保持极薄：只装工具链，检查内容全在 `scripts/check.sh` 里，而 `check.sh` 是随 merge 走的，所以下游停在哪个基底版本，跑的就是那个版本的检查语义，移动标签不会把新语义强加给旧下游。
+
+本地跑的就是 CI 跑的：`make check`（= 后端 + 前端 + 脚本），或 `make check-backend` / `make typecheck` 单跑。`make hooks` 启用 `.githooks/pre-push`，push 前按改动路径自动挑检查（`server/` 跑后端，`admin/` 只跑类型检查）；跳过用 `git push --no-verify`、`BASE_SKIP_HOOKS=1` 或 `git config base.prepush off`。
+
+组织若限制了 "Allow select actions" 导致远程调用被拒，把 `ci.yml` 里那行 `uses:` 换成 `./.github/workflows/checks.yml`（该文件本来就随 merge 继承了）。
 
 ### 新增额外服务（如前台站点 `web/`）
 
@@ -102,10 +134,16 @@ kit 提供的扩展点（够用就别 fork）：
 
 - 版本号语义：MAJOR = 同步后需要人工迁移；MINOR = 新功能/可选配置，可能要求重新登录；PATCH = 修 bug/文档。
 - 发布前必须在 `CHANGELOG.md` 写好 `## [X.Y.Z] - YYYY-MM-DD` 条目（含「升级步骤」），否则 `make base-release` 拒绝执行。
-- 发布：内容提交先推 main 等 CI 绿 → `make base-release VERSION=vX.Y.Z`（自动跑 `make base-check`：挂载点冻结、后端测试、交叉编译、脚本语法、Swagger 时效，然后写 `.base-version`、打标签、原子推送）。
+- 发布：内容提交先推 main 等 CI 绿 → `make base-release VERSION=vX.Y.Z`（自动跑 `make base-check`：挂载点冻结、后端测试、交叉编译、脚本语法、Swagger 时效、脚手架测试，然后写 `.base-version`、打标签、原子推送）。
 - `.base-version` 只由发布流程写入，任何人不要手改。
+- **`ci-v1` 是给下游用的移动标签**：`checks.yml` 有变化时 `base-release` 会自动前移它，所有下游立刻用上新的 CI，不需要同步。因此改 `checks.yml` 等于改所有人的 CI——务必先在基底本体跑绿（`checks-base` job 用的就是本提交里的副本）再发布。出事回滚：
+
+  ```bash
+  git tag -f ci-v1 <上一个好的 sha> && git push -f origin refs/tags/ci-v1
+  ```
+
 - 改动挂载点会被 `make check-hooks` 拦下。确有必要时：改完用 `git hash-object` 更新 `scripts/check-hooks.sh` 里的冻结 id，并在 CHANGELOG 说明（下游会有一处冲突）。
-- swag 版本在 Makefile / dev.sh / deploy.sh / CI 四处钉死为 v1.16.6，改版本要四处一起改，否则 CI 的 docs 时效检查会误报。
+- swag 版本在 Makefile / dev.sh / deploy.sh 三处钉死为 v1.16.6，改版本要三处一起改，否则 docs 时效检查会误报。（CI 不再单独钉：`scripts/check.sh` 走 `make swagger`，用的就是 Makefile 里那份。）
 
 ## 工作原则
 
