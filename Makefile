@@ -188,16 +188,27 @@ sync-base:
 		/^### / { s=($$0 ~ /升级步骤/); if (s) printf "\n===== %s 升级步骤 =====\n", ver; next } \
 		s'; \
 	echo ""; \
-	if [ "$${old%%.*}" != "$${new%%.*}" ] && [ "$(YES)" != 1 ]; then \
+	if echo "$$old" | grep -Eq '^v[0-9]+\.' && echo "$$new" | grep -Eq '^v[0-9]+\.' \
+	   && [ "$${old%%.*}" != "$${new%%.*}" ] && [ "$(YES)" != 1 ]; then \
 		echo "跨大版本同步（$$old -> $$new）需要人工迁移。"; \
 		echo "读完上面的升级步骤后，用 make sync-base VERSION=$(VERSION) YES=1 继续。"; \
 		exit 1; \
 	fi; \
-	git merge "$$ref" || { \
+	before=$$(git rev-parse HEAD); \
+	if ! git merge "$$ref"; then \
 		echo ""; \
-		echo "有冲突。解决并 commit 后，如果 server/go.mod 变了记得补一次: cd server && go mod tidy"; \
-		exit 1; }; \
-	if ! git diff --quiet ORIG_HEAD HEAD -- server/go.mod; then \
+		if ! git merge-base HEAD "$$ref" >/dev/null 2>&1; then \
+			echo "本仓库与基底没有共同提交历史（多半是当初用文件拷贝而不是 git clone 创建的），"; \
+			echo "merge 机制用不了。接回同步的办法见 README「老项目接回同步」一节。"; \
+		elif git diff --name-only --diff-filter=U | grep -q .; then \
+			echo "有冲突，冲突文件:"; git diff --name-only --diff-filter=U | sed 's/^/  /'; \
+			echo "解决并 commit 后，如果 server/go.mod 变了记得补一次: cd server && go mod tidy"; \
+		else \
+			echo "merge 未能执行（工作区不干净？看上面 git 的原文提示）。"; \
+		fi; \
+		exit 1; \
+	fi; \
+	if ! git diff --quiet "$$before" HEAD -- server/go.mod; then \
 		echo "==> server/go.mod 有变化，执行 go mod tidy"; \
 		(cd server && GOWORK=off go mod tidy) || echo "go mod tidy 失败，请手动处理"; \
 	fi

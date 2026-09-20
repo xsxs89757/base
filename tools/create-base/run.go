@@ -22,6 +22,9 @@ type session struct {
 	versionLabel string
 	// 目录是本次创建的，失败时才允许删
 	createdDir bool
+	// enableHooks 是否真的设上了 core.hooksPath（旧版基底没有 .githooks 时不设），
+	// 决定完成提示里要不要让用户自己跑一次 make hooks
+	hooksEnabled bool
 	// 在目标目录里执行命令
 	git runner
 }
@@ -78,7 +81,10 @@ func printNextSteps(s *session) {
 		fmt.Fprintf(s.out, "  git remote add origin <你的仓库地址>\n")
 	}
 	fmt.Fprintf(s.out, "  git push -u origin main\n")
-	fmt.Fprintf(s.out, "  make hooks                   # 启用 pre-push 检查，push 前自动按改动路径验证\n")
+	// 钩子已经在「启用 pre-push 钩子」那步设好了就不必再提；只有旧版基底走了跳过分支才需要用户自己来
+	if !s.hooksEnabled {
+		fmt.Fprintf(s.out, "  make hooks                   # 启用 pre-push 检查（该基底版本需手动启用）\n")
+	}
 	fmt.Fprintf(s.out, "  make dev                     # 启动前后端，默认账号 super / 123456\n")
 	fmt.Fprintf(s.out, "\n还需要手工处理:\n")
 	fmt.Fprintf(s.out, "  .deploy.env                  填 SSH_HOST / SSH_USER / SSH_PASS 后才能 make release\n")
