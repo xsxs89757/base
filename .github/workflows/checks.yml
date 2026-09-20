@@ -1,0 +1,142 @@
+name: checks
+
+# 基底与所有下游共用的检查流水线。下游的 ci.yml 通过
+#   uses: xsxs89757/base/.github/workflows/checks.yml@ci-v1
+# 调用它——CI 的修复不再需要下游先 make sync-base 才能拿到（khgl/sdut 就是这么
+# 连红十几次的：基底早修好了，它们没同步，一直跑着旧版 workflow）。
+#
+# 这个文件必须保持极薄：只装工具链，具体检查全在 scripts/check.sh 里。
+# check.sh 随 merge 走，所以下游停在哪个基底版本，跑的就是那个版本的检查语义，
+# 移动标签 ci-v1 不会把新语义强加给旧下游。
+#
+# 注意：这里不写 concurrency。被调用方里的 github.workflow 取到的是调用方的值，
+# 两边用同一个 group 会互相取消——concurrency 只写在 ci.yml 里。
+on:
+  workflow_call:
+    inputs:
+      all:
+        description: 忽略路径过滤，强制跑全部检查（基底本体固定用 true）
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  # 算出本次要跑哪些 job。手写 git diff，不引第三方 action。
+  changes:
+    name: 变更范围
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      frontend: ${{ steps.filter.outputs.frontend }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 2
+
+      # 上一次 run 失败时不做路径过滤。否则「提交 A 弄坏后端(红) → 提交 B 只改前端」
+      # 会让后端 job 被跳过、整个 run 变绿，而 main 实际还是坏的。
+      - name: 上次结果
+        id: prev
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          ok=false
+          if [ "${{ github.event_name }}" = push ]; then
+            prev=$(gh api -q '.workflow_runs[0].conclusion' \
+              "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?branch=${{ github.ref_name }}&status=completed&per_page=1" \
+              2>/dev/null || echo "")
+            [ "$prev" = success ] && ok=true
+          else
+            ok=true   # PR：与目标分支的历史红灯无关
+          fi
+          echo "green=$ok" >>"$GITHUB_OUTPUT"
+
+      - name: 计算改动
+        id: filter
+        run: |
+          set -u
+          all() { echo "backend=true" >>"$GITHUB_OUTPUT"; echo "frontend=true" >>"$GITHUB_OUTPUT"; exit 0; }
+          [ "${{ inputs.all }}" = true ] && all
+          [ "${{ steps.prev.outputs.green }}" = true ] || { echo "上次 run 非 success，全量检查"; all; }
+
+          if [ "${{ github.event_name }}" = pull_request ]; then
+            # merge commit 的第一父是目标分支
+            files=$(git diff --name-only HEAD^1 HEAD 2>/dev/null) || all
+          else
+            before="${{ github.event.before }}"
+            case "$before" in
+              ''|*[!0]*) ;;          # 正常 sha，继续
+              *) echo "新分支，全量检查"; all ;;
+            esac
+            git fetch --depth=1 origin "$before" >/dev/null 2>&1 || { echo "取不到 before（force push?），全量检查"; all; }
+            files=$(git diff --name-only "$before" HEAD 2>/dev/null) || all
+          fi
+          [ -n "$files" ] && echo "$files" || { echo "无改动"; all; }
+
+          b=false; f=false
+          echo "$files" | grep -q '^server/' && b=true
+          echo "$files" | grep -q '^admin/'  && f=true
+          # 根目录的构建/CI/脚本文件影响两边
+          echo "$files" | grep -Eq '^(Makefile|\.github/|scripts/|\.githooks/|[^/]*\.sh$)' && { b=true; f=true; }
+          echo "backend=$b"  >>"$GITHUB_OUTPUT"
+          echo "frontend=$f" >>"$GITHUB_OUTPUT"
+
+  backend:
+    name: 后端
+    needs: changes
+    if: needs.changes.outputs.backend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # 停在 v2.2.0 之前的下游没有这个文件，给一句能照做的提示，而不是 command not found
+      - name: 前置检查
+        run: |
+          test -f scripts/check.sh || {
+            echo "::error::缺少 scripts/check.sh，本 workflow 需要基底 >= v2.2.0，请先执行 make sync-base"
+            exit 1; }
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: server/go.mod
+          cache-dependency-path: server/go.sum
+
+      - run: bash scripts/check.sh scripts
+      - run: bash scripts/check.sh backend
+
+  frontend:
+    name: 前端
+    needs: changes
+    if: needs.changes.outputs.frontend == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 前置检查
+        run: |
+          test -f scripts/check.sh || {
+            echo "::error::缺少 scripts/check.sh，本 workflow 需要基底 >= v2.2.0，请先执行 make sync-base"
+            exit 1; }
+
+      # v5 只把运行时换成 Node 24；v6 起改成先装 pnpm 11 再自更新到 packageManager 钉的版本，没必要跟
+      - uses: pnpm/action-setup@v5
+        with:
+          package_json_file: admin/package.json
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: admin/.node-version
+          cache: pnpm
+          cache-dependency-path: admin/pnpm-lock.yaml
+
+      # admin/.npmrc 把 registry 指向 npmmirror（国内开发快），CI 在境外走官方源更稳
+      - name: 安装依赖
+        working-directory: admin
+        run: pnpm install --frozen-lockfile --registry https://registry.npmjs.org
+
+      - run: bash scripts/check.sh frontend

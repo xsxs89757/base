@@ -1,7 +1,8 @@
 name: ci
 
-# 下游项目 merge 基底后会继承这份 workflow：backend / frontend 两个 job 对下游同样有用，
-# hooks-guard 只在基底仓库本体运行（下游可以自由修改挂载点，那是它们存在的意义）。
+# 这个文件下游不需要再改了：真正的检查在 checks.yml 里，下游自己的 job 写在
+# .github/workflows/project.yml（基底承诺永不创建该文件，见 scripts/check-hooks.sh）。
+# 这样 ci.yml 不再是每次 sync-base 的冲突户。
 on:
   push:
     branches: [main]
@@ -9,12 +10,29 @@ on:
 
 permissions:
   contents: read
+  actions: read          # changes job 要读上一次 run 的结论
 
 concurrency:
   group: ci-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # 下游：调用基底发布的版本。修 CI 不再需要下游先 sync-base。
+  # ci-v1 是基底里的移动标签，由 make base-release 前移；它不匹配 sync-base 的
+  # refs/tags/v*，不会污染下游的标签空间。
+  # 组织限制了 "Allow select actions" 导致远程调用被拒时，把下面这行换成
+  # uses: ./.github/workflows/checks.yml （该文件本来就随 merge 继承了）。
+  checks:
+    if: github.repository != 'xsxs89757/base'
+    uses: xsxs89757/base/.github/workflows/checks.yml@ci-v1
+
+  # 基底本体：调用本提交里的 checks.yml，先在自己身上验证过，再前移 ci-v1 给下游。
+  checks-base:
+    if: github.repository == 'xsxs89757/base'
+    uses: ./.github/workflows/checks.yml
+    with:
+      all: true
+
   hooks-guard:
     name: 挂载点冻结校验
     if: github.repository == 'xsxs89757/base'
@@ -24,83 +42,24 @@ jobs:
       - uses: actions/checkout@v7
       - run: bash scripts/check-hooks.sh
 
-  backend:
-    name: 后端
+  # 只在基底本体跑。create-base 的 scaffold_test.go 里 fixtureBase() 会把
+  # **当前仓库自己的文件**（含 admin/apps/web-antd/.env）拷成一份假基底再跑
+  # 一遍脚手架，其中一步要把 VITE_APP_TITLE=Admin 替换成新项目名。这个耦合
+  # 是有意的——它正是用来发现"改了基底模板却忘了改脚手架"。但下游按约定必须
+  # 改掉那个值（见 AGENTS.md「新项目初始化」：同域名下多个后台共用 namespace
+  # 会互相覆盖登录态），于是替换匹配到 0 处，这一步在**任何下游仓库都是必然
+  # 失败**，且与下游自己的代码无关。
+  scaffold:
+    name: 脚手架
+    if: github.repository == 'xsxs89757/base'
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
-
       - uses: actions/setup-go@v7
         with:
-          go-version-file: server/go.mod
-          cache-dependency-path: server/go.sum
-
-      # bash -n 一次只检查第一个文件，必须逐个来
-      - name: 脚本语法
-        run: |
-          for f in dev.sh deploy.sh scripts/check-hooks.sh; do
-            bash -n "$f"
-          done
-
-      - name: vet & test
-        working-directory: server
+          go-version-file: tools/create-base/go.mod
+          # 纯标准库实现，没有 go.sum；开着缓存会因为找不到 dependency path 直接失败
+          cache: false
+      - working-directory: tools/create-base
         run: go vet ./... && go test ./...
-
-      # deploy.sh 用 CGO_ENABLED=0 交叉编译，这里保证纯 Go 依赖没被破坏
-      - name: 交叉编译
-        working-directory: server
-        run: CGO_ENABLED=0 go build -o /dev/null .
-
-      # 只在基底本体跑。create-base 的 scaffold_test.go 里 fixtureBase() 会把
-      # **当前仓库自己的文件**（含 admin/apps/web-antd/.env）拷成一份假基底再跑
-      # 一遍脚手架，其中一步要把 VITE_APP_TITLE=Admin 替换成新项目名。这个耦合
-      # 是有意的——它正是用来发现"改了基底模板却忘了改脚手架"。但下游按约定必须
-      # 改掉那个值（见 CLAUDE.md「新项目初始化」：同域名下多个后台共用 namespace
-      # 会互相覆盖登录态），于是替换匹配到 0 处，这一步在**任何下游仓库都是必然
-      # 失败**，且与下游自己的代码无关。条件与上面的 hooks-guard 同理。
-      - name: 脚手架 vet & test
-        if: github.repository == 'xsxs89757/base'
-        working-directory: tools/create-base
-        run: go vet ./... && go test ./...
-
-      # docs/ 随仓库提交（main.go import 了 base/docs），必须与代码同步；
-      # swag 版本与 Makefile 钉死同一个，否则不同版本的生成物差异会造成误报
-      - name: Swagger 文档时效
-        run: |
-          (cd server && go run github.com/swaggo/swag/cmd/swag@v1.16.6 init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit)
-          git diff --exit-code -- server/docs || {
-            echo "::error::server/docs 已过期，请本地执行 make swagger 后提交生成物"
-            exit 1
-          }
-
-  frontend:
-    name: 前端
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v7
-
-      # v5 只把运行时换成 Node 24；v6 起改成先装 pnpm 11 再自更新到 packageManager 钉的版本，没必要跟
-      - uses: pnpm/action-setup@v5
-        with:
-          package_json_file: admin/package.json
-
-      - uses: actions/setup-node@v7
-        with:
-          node-version-file: admin/.node-version
-          cache: pnpm
-          cache-dependency-path: admin/pnpm-lock.yaml
-
-      # admin/.npmrc 把 registry 指向 npmmirror（国内开发快），CI 在境外走官方源更稳
-      - name: 安装依赖
-        working-directory: admin
-        run: pnpm install --frozen-lockfile --registry https://registry.npmjs.org
-
-      - name: 类型检查
-        working-directory: admin
-        run: pnpm -F @vben/web-antd typecheck
-
-      - name: 构建
-        working-directory: admin
-        run: pnpm build:antd
