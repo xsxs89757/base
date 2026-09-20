@@ -309,6 +309,18 @@ cleanup() {
 trap 'cleanup; exit 0' SIGINT SIGTERM
 trap cleanup EXIT
 
+# --- 自动启用 pre-push 钩子 ---
+# 这是已有下游拿到钩子的途径：它们不会再跑一次 create-base，也未必记得执行 make hooks。
+# 只在没人设过 core.hooksPath 时才设（不覆盖别人已有的 husky/lefthook），
+# 关掉用 git config base.prepush off，或 git config --unset core.hooksPath。
+if [ -f "$ROOT_DIR/.githooks/pre-push" ] \
+   && [ -z "$(git -C "$ROOT_DIR" config --get core.hooksPath 2>/dev/null)" ] \
+   && [ "$(git -C "$ROOT_DIR" config --get base.prepush 2>/dev/null)" != "off" ]; then
+    if git -C "$ROOT_DIR" config core.hooksPath .githooks 2>/dev/null; then
+        echo -e "${GREEN}已启用 pre-push 检查${NC}（push 前按改动路径自动验证；关闭: git config base.prepush off）"
+    fi
+fi
+
 # --- 下游挂载点: dev.project.sh (基底不包含此文件、永不创建，下游按需新增) ---
 # 在仓库根新增 dev.project.sh 即可挂载额外开发服务，可实现三个函数:
 #   project_dev_start  后端/前端启动完成后调用: 用 resolve_port 解析端口
