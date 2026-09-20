@@ -166,12 +166,21 @@ fi
 REMOTE_ADMIN_DIR="${REMOTE_ADMIN_DIR:-${REMOTE_WEB_DIR:-}}"
 ADMIN_BUILD_CMD="${ADMIN_BUILD_CMD:-${WEB_BUILD_CMD:-pnpm build:antd}}"
 
-for var in SSH_HOST SSH_USER SSH_PASS REMOTE_SERVER_DIR REMOTE_ADMIN_DIR; do
+for var in SSH_HOST SSH_USER REMOTE_SERVER_DIR REMOTE_ADMIN_DIR; do
     if [ -z "${!var}" ]; then
         echo -e "${RED}配置项 $var 未设置，请检查 .deploy.env${NC}"
         exit 1
     fi
 done
+
+# 认证方式二选一：SSH_KEY（私钥文件）优先，否则用 SSH_PASS 口令；都没有就试 ssh-agent
+if [ -n "${SSH_KEY:-}" ] && [ ! -f "$SSH_KEY" ]; then
+    echo -e "${RED}SSH_KEY 指向的文件不存在: $SSH_KEY${NC}"
+    exit 1
+fi
+if [ -z "${SSH_KEY:-}" ] && [ -z "${SSH_PASS:-}" ]; then
+    echo -e "${YELLOW}未设置 SSH_KEY 或 SSH_PASS，将依赖 ssh-agent 中已加载的密钥${NC}"
+fi
 
 SSH_PORT="${SSH_PORT:-22}"
 AUTO_RESTART="${AUTO_RESTART:-no}"
@@ -182,8 +191,8 @@ SERVER_BIN_NAME="${SERVER_BIN_NAME:-server}"
 BUILD_DIR="$ROOT_DIR/.build/${PROJECT_NAME}"
 REMOTE_TMP_TAR="/tmp/${PROJECT_NAME}-admin.tar.gz"
 
-# 检测 sshpass
-if ! command -v sshpass &>/dev/null; then
+# 只有用口令认证时才需要 sshpass
+if [ -z "${SSH_KEY:-}" ] && [ -n "${SSH_PASS:-}" ] && ! command -v sshpass &>/dev/null; then
     echo -e "${YELLOW}安装 sshpass...${NC}"
     if [[ "$(uname)" == "Darwin" ]]; then
         brew install hudochenkov/sshpass/sshpass
@@ -195,8 +204,18 @@ fi
 # 端口参数不能放进公共 SSH_OPTS：ssh 用 -p，而 scp 的 -p 是"保留时间戳"(不带参数)，
 # 端口号会被 scp 当成待上传的本地文件 (scp: stat local "22": No such file)
 SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
-ssh_run() { sshpass -p "$SSH_PASS" ssh $SSH_OPTS -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "$@"; }
-scp_to() { sshpass -p "$SSH_PASS" scp $SSH_OPTS -P "${SSH_PORT}" "$1" "${SSH_USER}@${SSH_HOST}:$2"; }
+
+# SSH_WRAP 决定怎么认证。口令走 sshpass -e 读环境变量，不用 -p：
+# -p 的口令会出现在 ps 的命令行里，同机其他用户看得到。
+SSH_WRAP=()
+if [ -n "${SSH_KEY:-}" ]; then
+    SSH_OPTS="$SSH_OPTS -o BatchMode=yes -i $SSH_KEY"
+elif [ -n "${SSH_PASS:-}" ]; then
+    export SSHPASS="$SSH_PASS"
+    SSH_WRAP=(sshpass -e)
+fi
+ssh_run() { ${SSH_WRAP[@]+"${SSH_WRAP[@]}"} ssh $SSH_OPTS -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "$@"; }
+scp_to() { ${SSH_WRAP[@]+"${SSH_WRAP[@]}"} scp $SSH_OPTS -P "${SSH_PORT}" "$1" "${SSH_USER}@${SSH_HOST}:$2"; }
 
 # -------------------------------------------------------
 # 远程目录归属校验：目录内 .deploy-project 记录属主项目，
@@ -239,6 +258,51 @@ case "$REMOTE_UNAME_M" in
     armv7l)         TARGET_ARCH="arm" ;;
     *) echo -e "${RED}不支持的架构: $REMOTE_UNAME_M${NC}"; exit 1 ;;
 esac
+
+# -------------------------------------------------------
+# 生产配置预检
+# 必须在 SSH 探测和交叉编译之前做：config.prod.yaml 缺失时，原先要等到编译完、
+# 生成完 Swagger、连上服务器之后才在 cp 那一步报 "No such file or directory"，
+# 首次部署的人完全不知道该建什么文件。
+# -------------------------------------------------------
+preflight_server_config() {
+    local cfg="$SERVER_DIR/config.prod.yaml"
+    if [ ! -f "$cfg" ]; then
+        echo -e "${RED}缺少生产配置 server/config.prod.yaml${NC}"
+        echo -e "${YELLOW}从模板创建并按实际环境填写（该文件已 gitignore，不会入库）:${NC}"
+        echo ""
+        echo "  cp server/config.prod.yaml.example server/config.prod.yaml"
+        echo ""
+        exit 1
+    fi
+
+    # 非生产模式会种下 admin / jack 两个 123456 的演示账号（kit 只在非生产模式建它们）
+    # 行尾允许带注释：模板里这一行本来就跟着说明文字
+    if ! grep -Eq '^[[:space:]]*mode:[[:space:]]*"?production"?[[:space:]]*(#.*)?$' "$cfg"; then
+        local cur
+        cur=$(grep -E '^[[:space:]]*mode:' "$cfg" | head -1 | awk '{print $2}')
+        echo -e "${RED}config.prod.yaml 的 mode 是 ${cur:-(未设置)}，不是 production${NC}"
+        echo -e "${YELLOW}非生产模式会在线上种下演示账号 admin / jack（密码 123456），并回显内部错误详情。${NC}"
+        echo -e "${YELLOW}确认要这样发布，用 DEPLOY_ALLOW_DEV_MODE=1 ./deploy.sh ...${NC}"
+        [ "${DEPLOY_ALLOW_DEV_MODE:-}" = "1" ] || exit 1
+        echo -e "${YELLOW}        已按 DEPLOY_ALLOW_DEV_MODE=1 继续${NC}"
+    fi
+
+    # 后端在生产模式下会拒绝用占位密钥启动，这里提前说清楚，省得等部署完才发现服务起不来
+    if grep -q 'change-this-to-a-strong-secret' "$cfg"; then
+        echo -e "${RED}config.prod.yaml 的 jwt.secret 还是占位值${NC}"
+        echo -e "${YELLOW}生产模式会拒绝启动。换成随机值:${NC}"
+        echo ""
+        echo "  openssl rand -hex 32"
+        echo ""
+        exit 1
+    fi
+
+    if grep -Eq '^[[:space:]]*enable_swagger:[[:space:]]*true' "$cfg"; then
+        echo -e "${YELLOW}提醒: config.prod.yaml 里 enable_swagger: true，接口文档会在公网可见${NC}"
+    fi
+}
+case "$DEPLOY_MODE" in server|all) preflight_server_config ;; esac
 
 echo -e "${CYAN}==============================${NC}"
 echo -e "${CYAN}   Admin 后台管理系统 - 部署   ${NC}"

@@ -1,0 +1,30 @@
+# 生产配置模板。复制为 server/config.prod.yaml 并按实际环境填写。
+# 该文件不进 git（.gitignore 已覆盖 server/config.prod.yaml），deploy.sh 会把它
+# 上传成服务器上的 config.yaml。
+#
+#   cp server/config.prod.yaml.example server/config.prod.yaml
+#
+# deploy.sh 在编译前会预检：mode 必须是 production、jwt.secret 不能是占位值。
+
+server:
+  port: 8080                 # 首次部署时若该端口被占用，deploy.sh 会自动向后找空闲端口并回写本文件
+  mode: production           # 生产必须是 production：否则会种下演示账号 admin/jack (123456)，且 5xx 会回显内部错误详情
+  enable_swagger: false      # 生产关闭：接口文档不应在公网可见
+  cors_origins: "https://admin.example.com"   # 按实际域名填；留 "*" 会允许任意站点跨域（且无法带凭证）
+  swagger_title: ""
+  swagger_desc: ""
+  op_log_retention_days: 90  # 操作日志保留天数，0=永久。生产建议 90，否则表会一直涨
+  body_limit_mb: 0           # 请求体上限(MB)，0=Fiber 默认 4MB；有大文件上传时调大
+
+database:
+  # 生产建议用 MySQL/PostgreSQL。sqlite 也能跑（纯 Go 驱动、支持 CGO_ENABLED=0 交叉编译），
+  # 但注意 deploy.sh 只替换二进制，data.db 留在服务器上，换机器要自己迁移。
+  driver: mysql
+  dsn: "user:password@tcp(127.0.0.1:3306)/dbname?charset=utf8mb4&parseTime=True&loc=Local"
+
+jwt:
+  # 必须换成随机值：生产模式下占位值或短于 32 位会直接拒绝启动。
+  #   openssl rand -hex 32
+  secret: ""
+  expire: 168h               # 7 days
+  refresh_expire: 720h       # 30 days
