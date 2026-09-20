@@ -1,0 +1,11 @@
+# go.sum 用 union 合并：下游加自己的依赖、基底升 kit，几乎每次 sync-base 都会在这个
+# 文件上撞车，而它的内容是无序的校验和行集合——两边都留下即可，随后 go mod tidy
+# 会清掉多余的行（sync-base 合并后会自动跑）。go.mod 不能这么干：它有 require 块
+# 结构，union 会产生重复行和语法错误，必须人工合并。
+/server/go.sum merge=union
+
+# 脚本和钩子强制 LF。Windows 上开了 core.autocrlf=true 的人 checkout 会得到 CRLF，
+# 钩子和 dev.sh 在 Git Bash 里直接报 "bash\r: No such file or directory"。
+*.sh        text eol=lf
+/.githooks/* text eol=lf
+/Makefile*  text eol=lf
