@@ -207,15 +207,18 @@ SSH_OPTS="-o StrictHostKeyChecking=no -o ConnectTimeout=10"
 
 # SSH_WRAP 决定怎么认证。口令走 sshpass -e 读环境变量，不用 -p：
 # -p 的口令会出现在 ps 的命令行里，同机其他用户看得到。
+# 密钥路径用数组单独传，不能拼进 SSH_OPTS：后者是不带引号展开的，
+# 含空格的路径（如 ~/My Keys/id_ed25519）会被拆开，ssh 把后半段当成主机名。
 SSH_WRAP=()
+SSH_KEY_OPTS=()
 if [ -n "${SSH_KEY:-}" ]; then
-    SSH_OPTS="$SSH_OPTS -o BatchMode=yes -i $SSH_KEY"
+    SSH_KEY_OPTS=(-o BatchMode=yes -i "$SSH_KEY")
 elif [ -n "${SSH_PASS:-}" ]; then
     export SSHPASS="$SSH_PASS"
     SSH_WRAP=(sshpass -e)
 fi
-ssh_run() { ${SSH_WRAP[@]+"${SSH_WRAP[@]}"} ssh $SSH_OPTS -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "$@"; }
-scp_to() { ${SSH_WRAP[@]+"${SSH_WRAP[@]}"} scp $SSH_OPTS -P "${SSH_PORT}" "$1" "${SSH_USER}@${SSH_HOST}:$2"; }
+ssh_run() { ${SSH_WRAP[@]+"${SSH_WRAP[@]}"} ssh $SSH_OPTS ${SSH_KEY_OPTS[@]+"${SSH_KEY_OPTS[@]}"} -p "${SSH_PORT}" "${SSH_USER}@${SSH_HOST}" "$@"; }
+scp_to() { ${SSH_WRAP[@]+"${SSH_WRAP[@]}"} scp $SSH_OPTS ${SSH_KEY_OPTS[@]+"${SSH_KEY_OPTS[@]}"} -P "${SSH_PORT}" "$1" "${SSH_USER}@${SSH_HOST}:$2"; }
 
 # -------------------------------------------------------
 # 远程目录归属校验：目录内 .deploy-project 记录属主项目，
@@ -237,33 +240,10 @@ mark_remote_owner() {
 }
 
 # -------------------------------------------------------
-# 自动检测远程系统和架构
-# -------------------------------------------------------
-echo -e "${YELLOW}检测远程服务器系统信息...${NC}"
-REMOTE_INFO=$(ssh_run "echo \$(uname -s)_\$(uname -m)")
-REMOTE_UNAME_S=$(echo "$REMOTE_INFO" | cut -d'_' -f1)
-# -f2- 取第一个下划线之后的全部：x86_64 自带下划线，-f2 会截成 x86 被误判为不支持
-REMOTE_UNAME_M=$(echo "$REMOTE_INFO" | cut -d'_' -f2-)
-
-case "$REMOTE_UNAME_S" in
-    Linux)   TARGET_OS="linux" ;;
-    Darwin)  TARGET_OS="darwin" ;;
-    MINGW*|MSYS*|CYGWIN*) TARGET_OS="windows" ;;
-    *) echo -e "${RED}不支持的远程系统: $REMOTE_UNAME_S${NC}"; exit 1 ;;
-esac
-
-case "$REMOTE_UNAME_M" in
-    x86_64|amd64)  TARGET_ARCH="amd64" ;;
-    aarch64|arm64)  TARGET_ARCH="arm64" ;;
-    armv7l)         TARGET_ARCH="arm" ;;
-    *) echo -e "${RED}不支持的架构: $REMOTE_UNAME_M${NC}"; exit 1 ;;
-esac
-
-# -------------------------------------------------------
 # 生产配置预检
-# 必须在 SSH 探测和交叉编译之前做：config.prod.yaml 缺失时，原先要等到编译完、
-# 生成完 Swagger、连上服务器之后才在 cp 那一步报 "No such file or directory"，
-# 首次部署的人完全不知道该建什么文件。
+# 位置刻意排在下面的 SSH 探测之前：config.prod.yaml 缺失时，原先要等到连上服务器、
+# 交叉编译完、生成完 Swagger 之后才在 cp 那一步报 "No such file or directory"，
+# 首次部署的人完全不知道该建什么文件。本函数不依赖任何远程变量，可以最先跑。
 # -------------------------------------------------------
 preflight_server_config() {
     local cfg="$SERVER_DIR/config.prod.yaml"
@@ -303,6 +283,29 @@ preflight_server_config() {
     fi
 }
 case "$DEPLOY_MODE" in server|all) preflight_server_config ;; esac
+
+# -------------------------------------------------------
+# 自动检测远程系统和架构
+# -------------------------------------------------------
+echo -e "${YELLOW}检测远程服务器系统信息...${NC}"
+REMOTE_INFO=$(ssh_run "echo \$(uname -s)_\$(uname -m)")
+REMOTE_UNAME_S=$(echo "$REMOTE_INFO" | cut -d'_' -f1)
+# -f2- 取第一个下划线之后的全部：x86_64 自带下划线，-f2 会截成 x86 被误判为不支持
+REMOTE_UNAME_M=$(echo "$REMOTE_INFO" | cut -d'_' -f2-)
+
+case "$REMOTE_UNAME_S" in
+    Linux)   TARGET_OS="linux" ;;
+    Darwin)  TARGET_OS="darwin" ;;
+    MINGW*|MSYS*|CYGWIN*) TARGET_OS="windows" ;;
+    *) echo -e "${RED}不支持的远程系统: $REMOTE_UNAME_S${NC}"; exit 1 ;;
+esac
+
+case "$REMOTE_UNAME_M" in
+    x86_64|amd64)  TARGET_ARCH="amd64" ;;
+    aarch64|arm64)  TARGET_ARCH="arm64" ;;
+    armv7l)         TARGET_ARCH="arm" ;;
+    *) echo -e "${RED}不支持的架构: $REMOTE_UNAME_M${NC}"; exit 1 ;;
+esac
 
 echo -e "${CYAN}==============================${NC}"
 echo -e "${CYAN}   Admin 后台管理系统 - 部署   ${NC}"

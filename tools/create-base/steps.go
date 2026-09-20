@@ -236,8 +236,11 @@ func enableHooks(s *session) error {
 		fmt.Fprintf(s.out, "    跳过（已设置 core.hooksPath=%s）\n", strings.TrimSpace(cur))
 		return nil
 	}
-	_, err := s.git.git("config", "core.hooksPath", ".githooks")
-	return err
+	if _, err := s.git.git("config", "core.hooksPath", ".githooks"); err != nil {
+		return err
+	}
+	s.hooksEnabled = true
+	return nil
 }
 
 // commitInit 提交初始化改动。--no-verify: 下游可能自己装了 commitlint 之类的钩子，

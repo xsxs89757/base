@@ -15,8 +15,8 @@
 
 ```bash
 git clone --depth 1 --branch v5.6.0 https://github.com/vbenjs/vue-vben-admin.git /tmp/vben
-diff -rq /tmp/vben/packages admin/packages
-diff -rq /tmp/vben/internal admin/internal
+diff -rq -x dist -x .turbo -x node_modules /tmp/vben/packages admin/packages
+diff -rq -x dist -x .turbo -x node_modules /tmp/vben/internal admin/internal
 ```
 
 当前共 **44 处差异**：40 个文件内容不同 + 4 个本仓库独有路径。分三类，性质完全不同。

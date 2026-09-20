@@ -62,11 +62,8 @@ check_backend() {
     (cd server && CGO_ENABLED=0 go build -o /dev/null .)
 
     if [ "$want_swagger" = 1 ]; then
-        # 走 make 而不是直接调 swag：下游（phonehz）把 swagger 目标改成了生成两个实例，
-        # 走 make 才能让它们的定制自动生效。
         step "Swagger 生成"
-        have make || die "未找到 make"
-        make --no-print-directory swagger
+        gen_swagger
 
         # 生成物时效只在基底本体校验。下游的 dev.sh / deploy.sh 每次都会重新生成，
         # 入库那份对它们没有意义，校验时效只会制造与自己代码无关的红灯。
@@ -78,6 +75,44 @@ check_backend() {
     fi
 
     ok "后端检查通过"
+}
+
+# 重新生成 server/docs。
+gen_swagger() {
+    if have make; then
+        # 优先走 make：下游（phonehz）把 swagger 目标改成了生成两个实例，
+        # 走 make 才能让它们的定制自动生效。
+        make --no-print-directory swagger
+    else
+        # Windows 的 Git Bash 不带 make——这正是本脚本不写成 Makefile 目标的首要理由，
+        # 所以这里也不能因为缺 make 就失败。降级为直接调同一个钉死版本的 swag；
+        # 下游若定制过 swagger 目标，这条降级路径覆盖不到，故给出提示。
+        echo "${YELLOW}    未找到 make，直接调用 swag（若你定制过 swagger 目标，请装 make 或手动生成）${NC}"
+        (cd server && go run github.com/swaggo/swag/cmd/swag@v1.16.6 init \
+            -g main.go -o docs --parseDependencyLevel 3 \
+            --packagePrefix base,github.com/xsxs89757/base-kit)
+    fi
+}
+
+# 基底本体专用：push 前确认 server/docs 没过期。
+# CI 上「Swagger 文档时效」是基底唯一会因 docs 变红的检查，钩子不覆盖它就漏掉了
+# 最常见的那类红灯。只在工作区里 docs 干净时做——否则说明开发者手上有尚未提交的
+# 生成物，重新生成再还原会毁掉它。
+check_swagger_fresh() {
+    is_base || return 0
+    if ! git diff --quiet -- server/docs; then
+        echo "${YELLOW}pre-push: server/docs 有未提交改动，跳过时效检查（记得把生成物一起提交）${NC}"
+        return 0
+    fi
+    step "Swagger 文档时效"
+    gen_swagger >/dev/null 2>&1 || {
+        echo "${YELLOW}pre-push: Swagger 生成失败，跳过时效检查${NC}"
+        return 0
+    }
+    if ! git diff --quiet -- server/docs; then
+        git checkout -- server/docs      # 还原，不把生成物留在工作区
+        die "server/docs 已过期：先跑 make swagger 并把生成物一起提交"
+    fi
 }
 
 # ---------------------------------------------------------------------------
@@ -162,7 +197,10 @@ pre_push() {
         else
             base="$rsha"
         fi
-        if [ -n "$base" ]; then
+        # 远端 sha 未必存在于本地（对方 force push 过、或本地没 fetch）。
+        # 不校验的话 git diff 会以 fatal: bad object 失败，set -e 直接把 push 拦下——
+        # 而钩子绝不能因为环境问题挡住 push（见下面的工具缺失处理）。
+        if [ -n "$base" ] && git rev-parse -q --verify "$base^{commit}" >/dev/null 2>&1; then
             ranges="$ranges $base..$lsha"
         else
             ranges="ALL"
@@ -210,9 +248,12 @@ pre_push() {
     fi
 
     echo "${YELLOW}pre-push 检查中（跳过: git push --no-verify / BASE_SKIP_HOOKS=1 / git config base.prepush off）${NC}"
-    # 此时 server/docs 仍被 git 跟踪，生成 Swagger 会弄脏工作区，故 --no-swagger
+    # --no-swagger：生成会弄脏工作区。基底本体改由 check_swagger_fresh 单独核对并还原。
     [ "$do_scripts" = 1 ]  && check_scripts
-    [ "$do_backend" = 1 ]  && check_backend --no-swagger
+    if [ "$do_backend" = 1 ]; then
+        check_backend --no-swagger
+        check_swagger_fresh
+    fi
     if [ "$do_frontend" = 1 ]; then
         if [ "$pref" = full ]; then check_frontend; else check_frontend --fast; fi
     fi

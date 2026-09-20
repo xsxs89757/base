@@ -21,6 +21,9 @@ on:
 
 permissions:
   contents: read
+  # changes job 要用 gh api 读上一次 run 的结论。被调用方的 permissions 会覆盖调用方的，
+  # 漏了这一条不会报错，只会让 403 被静默吞掉 → 每次 push 都退化成全量检查。
+  actions: read
 
 jobs:
   # 算出本次要跑哪些 job。手写 git diff，不引第三方 action。
@@ -68,8 +71,8 @@ jobs:
           else
             before="${{ github.event.before }}"
             case "$before" in
-              ''|*[!0]*) ;;          # 正常 sha，继续
-              *) echo "新分支，全量检查"; all ;;
+              *[!0]*) ;;             # 含非 0 字符 = 正常 sha，继续
+              *) echo "新分支或 before 缺失，全量检查"; all ;;   # 全 0 或空串都落这里
             esac
             git fetch --depth=1 origin "$before" >/dev/null 2>&1 || { echo "取不到 before（force push?），全量检查"; all; }
             files=$(git diff --name-only "$before" HEAD 2>/dev/null) || all
