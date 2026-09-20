@@ -88,6 +88,8 @@ check_frontend() {
     [ "${1:-}" = "--fast" ] && fast=1
 
     have pnpm || die "未找到 pnpm"
+    # 否则 vue-tsc 会以 "spawn ENOENT" 失败，看不出是没装依赖
+    [ -d admin/node_modules ] || die "admin/node_modules 不存在，先执行: cd admin && pnpm install"
 
     step "前端类型检查"
     (cd admin && pnpm -F @vben/web-antd typecheck)
