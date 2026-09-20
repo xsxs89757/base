@@ -61,7 +61,6 @@ dev-dist
 yarn.lock
 package-lock.json
 .VSCodeCounter
-**/backend-mock/data
 
 # env local overrides
 .env.local

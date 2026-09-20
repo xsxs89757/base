@@ -1,6 +1,9 @@
 packages:
   - internal/*
   - internal/lint-configs/*
+  # 不再用 commitlint/czg（提交信息是中文，conventional-commit 规则只会碍事）。
+  # 目录保留以便与上游 vben 对齐，只是不纳入 workspace，省掉 @commitlint/* 的安装。
+  - '!internal/lint-configs/commitlint-config'
   - packages/*
   - packages/@core/base/*
   - packages/@core/ui-kit/*
