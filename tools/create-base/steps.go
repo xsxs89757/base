@@ -222,8 +222,26 @@ func installDeps(s *session) error {
 	return adminRunner.stream("pnpm", "install", "--frozen-lockfile")
 }
 
-// commitInit 提交初始化改动。--no-verify: admin/lefthook.yml 配了 commitlint，
-// 若下游装了 hook，中文提交信息会被 conventional-commit 规则拦下。
+// enableHooks 启用仓库自带的 pre-push 钩子（push 前按改动路径跑对应检查）。
+//
+// 只在 .githooks/pre-push 存在时设置：create-base 通常以 @latest 运行，而用户可能
+// 指定用 v2.2.0 之前的基底版本建项目，那时还没有这个目录。
+// 已经设过 core.hooksPath 的不覆盖（基底刚 clone 出来不会有，但 --dir 指向已有仓库时可能有）。
+func enableHooks(s *session) error {
+	if _, err := os.Stat(filepath.Join(s.opts.Dir, ".githooks", "pre-push")); err != nil {
+		fmt.Fprintf(s.out, "    跳过（该基底版本没有 .githooks）\n")
+		return nil
+	}
+	if cur, err := s.git.git("config", "--get", "core.hooksPath"); err == nil && strings.TrimSpace(cur) != "" {
+		fmt.Fprintf(s.out, "    跳过（已设置 core.hooksPath=%s）\n", strings.TrimSpace(cur))
+		return nil
+	}
+	_, err := s.git.git("config", "core.hooksPath", ".githooks")
+	return err
+}
+
+// commitInit 提交初始化改动。--no-verify: 下游可能自己装了 commitlint 之类的钩子，
+// 中文提交信息会被 conventional-commit 规则拦下；初始化这一次提交不该被它挡住。
 func commitInit(s *session) error {
 	if _, err := s.git.git("add", "-A"); err != nil {
 		return err

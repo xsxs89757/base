@@ -40,6 +40,7 @@ func run(opts options, out io.Writer) error {
 		{"生成部署配置", writeDeployEnv},
 		{"设置前端应用标识", writeAdminEnv},
 		{"生成穿云配置", writeChuanyunToml},
+		{"启用 pre-push 钩子", enableHooks},
 		{"安装依赖", installDeps},
 		{"提交初始化", commitInit},
 	}
@@ -77,10 +78,11 @@ func printNextSteps(s *session) {
 		fmt.Fprintf(s.out, "  git remote add origin <你的仓库地址>\n")
 	}
 	fmt.Fprintf(s.out, "  git push -u origin main\n")
+	fmt.Fprintf(s.out, "  make hooks                   # 启用 pre-push 检查，push 前自动按改动路径验证\n")
 	fmt.Fprintf(s.out, "  make dev                     # 启动前后端，默认账号 super / 123456\n")
 	fmt.Fprintf(s.out, "\n还需要手工处理:\n")
 	fmt.Fprintf(s.out, "  .deploy.env                  填 SSH_HOST / SSH_USER / SSH_PASS 后才能 make release\n")
-	fmt.Fprintf(s.out, "  README.md / CLAUDE.md        改成本项目自己的说明（AGENTS.md 与 CLAUDE.md 保持一致）\n")
+	fmt.Fprintf(s.out, "  README.md / AGENTS.md        改成本项目自己的说明（CLAUDE.md 只是 @AGENTS.md，不用动）\n")
 	fmt.Fprintf(s.out, "  make sync-base               以后合入基底更新；make base-version 查看版本\n")
 	if s.opts.SkipInstall {
 		fmt.Fprintf(s.out, "\n本次跳过了依赖安装，首次启动前先跑:\n")
