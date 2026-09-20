@@ -8,6 +8,90 @@
 
 ## [Unreleased]
 
+## [2.2.0] - 2026-09-20
+
+让 CI 少红、红了好修，并清掉 vben 上游残留。没有破坏性改动，接口和数据结构没动。
+
+背景：下游此前没有任何本地校验（`make base-check` 在下游必然误报，且不含前端），
+CI 又是拷贝继承的——基底修好的 CI 下游不同步就拿不到。khgl 因此连红 12 次
+（脚手架测试在任何下游都必然失败，基底早修了它没同步），sdut 连红 7 次
+（`server/docs` 过期 4 次、同一个 vue-tsc 类型错误连挂 4 次）。
+
+### 新增
+
+- `scripts/check.sh`：本地、pre-push 钩子、CI 跑同一份检查逻辑。
+  `make check` / `check-backend` / `check-frontend` / `typecheck` 是它的转发。
+  放脚本而非 make 目标：Git for Windows 不带 make，钩子调不了；Makefile 是下游的
+  冲突文件，冲突解错就把目标丢了。
+- `.githooks/pre-push`：push 前按改动路径挑检查（`server/` 跑后端，`admin/` 只跑
+  20 秒的类型检查而不是 90 秒的构建）。`make hooks` 启用，`./dev.sh` 启动时也会
+  自动启用（不覆盖已有的 husky/lefthook）。跳过：`git push --no-verify`、
+  `BASE_SKIP_HOOKS=1`、`git config base.prepush off`。找不到 go/pnpm 时只警告不拦。
+- `.github/workflows/checks.yml`：可复用 workflow，下游的 `ci.yml` 通过
+  `@ci-v1` 调用。**修 CI 不再需要下游先同步**。按路径跳过 job（只改后端不再跑
+  4 分钟前端），并带一条守卫：上次 run 不是 success 就全量跑，避免「先弄坏后端、
+  再只改前端」让 run 假绿。
+- 两个新挂载点，基底承诺永不创建：`.github/workflows/project.yml`（下游自有 CI job）、
+  `Makefile.project`（下游自有 make 目标，带 `## 说明` 注释会进 `make help`，
+  写进 `PROJECT_CHECKS` 会并入 `make check`）。
+- `.gitattributes`：`server/go.sum` 用 union 合并（每次同步必撞车而两边都该保留，
+  合并后自动 `go mod tidy` 清理）；脚本和钩子强制 LF，避免 Windows autocrlf 下
+  钩子变成 `bash\r` 跑不起来。
+- `server/config.prod.yaml.example`：此前这个文件没有模板，首次部署要等编译完、
+  连上服务器才在 `cp` 那步报 "No such file or directory"。
+- `admin/VBEN_PATCHES.md`：记录 `admin/` 相对上游 vben 改了什么。
+- `deploy.sh` 支持 `SSH_KEY` 密钥认证；口令改用 `sshpass -e`（`-p` 会把口令暴露在
+  `ps` 里）。
+
+### 变更
+
+- **下游不再因 `server/docs` 过期变红**：时效校验只在基底本体做。下游的 `dev.sh`
+  和 `deploy.sh` 每次都会重新生成，入库那份对它们没有意义。
+- `sync-base` 合并前打印「已合入版本 → 目标版本」之间每一版的升级步骤；跨大版本
+  需要显式 `YES=1`；合并后 `server/go.mod` 有变化自动 `go mod tidy`。
+- `deploy.sh` 在 SSH 探测和编译之前预检生产配置：文件缺失、`mode` 不是 production
+  （会种下 admin/jack 的 123456 演示账号）、jwt.secret 仍是占位值都直接拒绝，
+  `enable_swagger: true` 给警告。
+- `AGENTS.md` 成为 AI 协作约定的唯一来源，`CLAUDE.md` 只剩一行 `@AGENTS.md`。
+- swag 版本的钉死位置从四处减到三处（CI 改走 `make swagger`）。
+
+### 移除
+
+清理 vben 上游残留，全部零引用（共 39 个文件）：
+
+- `admin/tea.yaml` —— tea.xyz 清单，内含 vben 作者的区块链钱包地址；
+- `admin/apps/backend-mock/` —— 29 个文件、零引用、带硬编码 JWT secret，
+  但在 `apps/*` 通配里，每次 CI 和每台开发机都要装它整棵依赖树；
+- `admin/lefthook.yml` + `.commitlintrc.js` —— 从来没装上过的死配置
+  （没有 `prepare` 脚本，`.git/hooks` 是空的）；
+- `admin/README*.md` 三份上游营销文档、`.gitpod.yml`、`.gitconfig`、`.dockerignore`、
+  `cspell.json`、`vben-admin.code-workspace`、`scripts/deploy/`；
+- `admin/package.json` 里 15 个指向已删目录的脚本，及相应的根 devDependencies；
+- `.cursor/rules/` —— 同一套规则的第三份拷贝，已漂移（还指向旧版 Vben 文档）。
+
+`admin/packages/**` 和 `admin/internal/**` 未做任何改动（保持与上游对齐）。
+穿云接入从 `dev.sh` 拆到 `scripts/dev-chuanyun.sh`，行为不变，`dev.sh` 697 行降到 472 行。
+
+### 升级步骤
+
+1. `.github/workflows/ci.yml` 会冲突：取基底版本（`git checkout --theirs
+   .github/workflows/ci.yml`），把自己加的 job 挪到新建的
+   `.github/workflows/project.yml`（模板见 AGENTS.md「六个下游挂载点」）。
+   自己加的 `cmp CLAUDE.md AGENTS.md` 这类步骤要删掉。
+2. `CLAUDE.md` 会冲突。**先 `diff CLAUDE.md AGENTS.md`**，把只存在于 CLAUDE.md 里的
+   内容并进 AGENTS.md，然后 CLAUDE.md 取基底版本（只有一行 `@AGENTS.md`）。
+3. `admin/pnpm-lock.yaml` 若冲突：取基底版本再 `cd admin && pnpm install --no-frozen-lockfile`。
+4. 用到了被删内容的项目自行加回：`backend-mock`、`cspell`、`lefthook`/`commitlint`、
+   `@playwright/test`、`@changesets/*`、`is-ci`，以及 `admin/package.json` 里那些
+   `build:ele` / `dev:play` 之类的脚本。
+5. `.cursor/rules/*` 会是 modify/delete 冲突：`git rm` 即可；想自己留着也行。
+6. Makefile 里已有 `check` / `check-backend` / `check-frontend` / `check-scripts` /
+   `typecheck` / `hooks` 同名目标的，改名避开；今后新目标写进 `Makefile.project`。
+7. 从 dev.sh 里抠 `chuanyun_*` 函数用的测试，改成 source `scripts/dev-chuanyun.sh`。
+8. 执行一次 `make hooks` 启用 pre-push 检查（跑过 `./dev.sh` 的会自动启用）。
+9. 部署前确认 `server/config.prod.yaml` 的 `mode: production`、jwt.secret 不是占位值，
+   否则新的预检会拒绝部署（这两条本来就会让线上出问题，只是以前没人拦）。
+
 ## [2.1.0] - 2026-09-15
 
 钉 base-kit v1.1.0（新增 `basekit.Go`：后台任务随 app 关闭而停止），去掉 CI 上每次都有的两条注解；

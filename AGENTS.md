@@ -64,7 +64,7 @@ kit 提供的扩展点（够用就别 fork）：
 
 **其余文件下游可自由修改**（工程脚手架和文档本来就该项目化）：
 
-- `CLAUDE.md` / `AGENTS.md` / `README.md`——改成项目自己的说明。
+- `AGENTS.md` / `README.md`——改成项目自己的说明（`CLAUDE.md` 只有一行 `@AGENTS.md`，不用动）。
 - `dev.sh`、`deploy.sh`、`Makefile`、`.gitignore`、`.github/`、`scripts/`、各类 `*.example` 配置模板；直接改允许，但想完全避开同步冲突，优先用下面的脚本挂载点扩展。
 - 前端业务区 `admin/apps/web-antd/src/`（views、api、`router/routes/modules/`、locales、adapter 微调）。
 - 后端业务代码：在 `server/internal/` 下按 model/dto/service/handler/validator 分层新增文件，路由注册在 `router/project.go`。
@@ -295,21 +295,27 @@ swag init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,githu
 
 ## 验证命令
 
-按改动范围选择验证：
+**首选 `make check`**——它和 CI 跑的是同一份逻辑（`scripts/check.sh`），本地绿了 CI 就绿：
 
 ```bash
-# 后端
-cd server
-go test ./...
-swag init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit
+make check            # 后端 + 前端 + 脚本语法，等同 CI
+make check-backend    # 仅后端：vet / test / 交叉编译 / Swagger 生成
+make typecheck        # 仅前端类型检查（约 20 秒，改 .vue/.ts 后先跑这个）
+make check-frontend   # 前端类型检查 + 构建
+make check-scripts    # 仅 shell 语法（改 dev.sh / deploy.sh / scripts/ 后）
+```
 
-# 前端
-cd admin
-pnpm dev:antd
-pnpm build:antd
+`make hooks` 启用后，push 前会按改动路径自动挑上面的检查（`./dev.sh` 启动时也会自动启用）。
 
-# 部署脚本改动后做语法检查
-bash -n dev.sh && bash -n deploy.sh
+改检查内容请改 `scripts/check.sh`，不要在 Makefile 或 ci.yml 里另加命令——三处
+共用一份逻辑正是它存在的意义。
+
+单独跑某一步时（少用）：
+
+```bash
+cd server && go test ./...
+make swagger          # 重新生成 server/docs
+cd admin && pnpm dev:antd
 ```
 
 如果只是文档或规则变更，至少检查 Markdown 内容和路径是否与当前仓库一致。
@@ -320,9 +326,15 @@ bash -n dev.sh && bash -n deploy.sh
 # 新建项目（脚手架）
 go run github.com/xsxs89757/base/tools/create-base@latest <项目名> --origin <仓库地址>
 
+# 校验（与 CI 同一份逻辑）
+make check                      # 后端 + 前端 + 脚本
+make typecheck                  # 仅前端类型检查（最快）
+make hooks                      # 启用 pre-push 钩子
+
 # 基底版本
-make sync-base                  # 下游合入基底最新版本
+make sync-base                  # 下游合入基底最新版本（合并前会打印升级步骤）
 make sync-base VERSION=main     # 合入开发中的 main
+make sync-base YES=1            # 跨大版本时确认继续
 make base-version               # 查看已合入版本与远端最新版本
 make base-release VERSION=v1.1.0  # 仅基底本体：发布新版本
 

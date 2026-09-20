@@ -202,10 +202,24 @@ pnpm dev:antd
 
 ### 配置
 
+要两个文件，都已 gitignore：
+
 ```bash
-cp .deploy.env.example .deploy.env
-# 编辑 .deploy.env 填入服务器 SSH 信息和目录
+cp .deploy.env.example .deploy.env                        # 服务器 SSH 信息和目录
+cp server/config.prod.yaml.example server/config.prod.yaml # 线上的后端配置
 ```
+
+`.deploy.env` 的认证二选一：`SSH_KEY`（推荐）或 `SSH_PASS`，都不填则用 ssh-agent
+里已加载的密钥。
+
+`config.prod.yaml` 部署前会被预检，下面两条不满足会直接拒绝：
+
+- `mode: production` —— 非生产模式会在线上种下 `admin` / `jack` 两个 123456 的
+  演示账号，5xx 还会回显内部错误详情；确实要这样发布用 `DEPLOY_ALLOW_DEV_MODE=1`；
+- `jwt.secret` 不能是占位值（`openssl rand -hex 32` 生成）—— 后端生产模式本来
+  就会拒绝启动。
+
+`enable_swagger: true` 只警告不拦，但接口文档会在公网可见，生产建议设 false。
 
 ### 部署命令
 
@@ -392,15 +406,32 @@ make base-version                  # 查看当前已合入版本与远端最新�
 - **核心框架不建议就地改**（server 框架层、admin 的 vben 封装）：这些文件基底
   会持续更新，下游改了每次同步都要重复解决冲突——通用改进请回流基底仓库，
   改完各下游 `make sync-base` 合入；
-- **其余自由改**：CLAUDE.md / README / dev.sh / deploy.sh / Makefile 等脚手架
-  和文档尽管项目化；业务代码放新增文件；路由和模型用两个专属挂载点注册
-  （基底永不改动它们）：`server/internal/router/project.go`、
-  `server/internal/store/project.go`；
+- **其余自由改**：AGENTS.md / README / dev.sh / deploy.sh 等脚手架和文档尽管项目化；
+  业务代码放新增文件；
+- **优先用挂载点**（基底承诺永不改动它们，同步永不冲突）：业务路由
+  `server/internal/router/project.go`、模型与种子 `server/internal/store/project.go`、
+  开发与部署扩展 `dev.project.sh` / `deploy.project.sh`、自有 make 目标
+  `Makefile.project`、自有 CI job `.github/workflows/project.yml`；
 - 唯一硬性禁令：不改 `server/go.mod` 的 **module 名**（保持 `base`），否则 import
   路径全面 diverge，之后每次 merge 大面积冲突；**新增依赖不受限**——`go get`
-  照常用，同步冲突时合并双方依赖行后 `go mod tidy` 即可。
+  照常用，`server/go.sum` 已配 union 合并，同步后自动 `go mod tidy`。
 
-详细纪律见 CLAUDE.md / AGENTS.md 的「基底与下游项目」一节。
+`admin/` 相对上游 vben 改了什么，见 [admin/VBEN_PATCHES.md](admin/VBEN_PATCHES.md)。
+详细纪律见 [AGENTS.md](AGENTS.md) 的「基底与下游项目」一节。
+
+### 提交前自检
+
+本地跑的就是 CI 跑的，都走 `scripts/check.sh`：
+
+```bash
+make check            # 后端 + 前端 + 脚本，等同 CI
+make check-backend    # 仅后端：vet / test / 交叉编译 / Swagger
+make typecheck        # 仅前端类型检查（最快，约 20 秒）
+```
+
+`make hooks` 启用 pre-push 钩子后，push 前会按本次改动路径自动挑检查
+（`./dev.sh` 启动时也会自动启用）。要跳过：`git push --no-verify`、
+`BASE_SKIP_HOOKS=1`，或 `git config base.prepush off` 永久关闭。
 
 ## 功能模块
 
