@@ -112,6 +112,7 @@ func fixtureBase(t *testing.T) string {
 		"chuanyun.toml.example",
 		"admin/apps/web-antd/.env",
 		"Makefile",
+		".githooks/pre-push",
 	}
 	for _, f := range files {
 		src := filepath.Join(root, f)
@@ -242,6 +243,35 @@ func TestScaffoldFromTag(t *testing.T) {
 	// 默认不生成 chuanyun.toml
 	if _, err := os.Stat(filepath.Join(dst, "chuanyun.toml")); !os.IsNotExist(err) {
 		t.Error("未指定 --chuanyun 时不应生成 chuanyun.toml")
+	}
+
+	// pre-push 钩子已启用：新项目从第一天起就有本地校验
+	if got := gitIn(t, dst, "config", "core.hooksPath"); got != ".githooks" {
+		t.Errorf("core.hooksPath = %q, 期望 .githooks", got)
+	}
+}
+
+// 用 v2.2.0 之前的基底版本建项目时（那时还没有 .githooks），启用钩子这一步
+// 必须安静跳过而不是报错——create-base 通常以 @latest 运行，版本却可以指定旧的。
+func TestScaffoldWithoutGithooks(t *testing.T) {
+	base := fixtureBase(t)
+	if err := os.RemoveAll(filepath.Join(base, ".githooks")); err != nil {
+		t.Fatal(err)
+	}
+	commit := exec.Command("git", "commit", "-qam", "移除 .githooks，模拟旧版基底")
+	commit.Dir = base
+	if out, err := commit.CombinedOutput(); err != nil {
+		t.Fatalf("git commit: %v\n%s", err, out)
+	}
+
+	dst := filepath.Join(t.TempDir(), "old")
+	var out bytes.Buffer
+	opts := options{Name: "old", Dir: dst, BaseURL: base, Version: "main", SkipInstall: true}
+	if err := run(opts, &out); err != nil {
+		t.Fatalf("run: %v\n%s", err, out.String())
+	}
+	if err := exec.Command("git", "-C", dst, "config", "--get", "core.hooksPath").Run(); err == nil {
+		t.Error("基底没有 .githooks 时不应设置 core.hooksPath")
 	}
 }
 

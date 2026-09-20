@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文件给 Codex/Agents 使用，作用范围为整个仓库。CLAUDE.md 与 AGENTS.md 内容保持一致，以本文件中的路径和执行约定为当前仓库准则。
+**本文件是 AI 协作约定的唯一来源**，作用范围为整个仓库。`CLAUDE.md` 只有一行 `@AGENTS.md`（Claude Code 的导入语法），Cursor / Codex 等直接读本文件——规则只写在这里，不再维护多份副本。
 
 ## 项目概览
 
