@@ -179,8 +179,28 @@ sync-base:
 	else \
 		echo "VERSION 须为 vX.Y.Z 或 main"; exit 1; \
 	fi; \
-	echo "==> 当前已合入: $$(cat .base-version 2>/dev/null || echo '未知(早于 v1.0.0)')  ->  合入 $$ref"; \
-	git merge "$$ref"
+	old=$$(cat .base-version 2>/dev/null || echo 'v0.0.0'); \
+	new=$$(git show "$$ref:.base-version" 2>/dev/null || echo '(开发中)'); \
+	echo "==> 当前已合入: $$old  ->  合入 $$ref ($$new)"; \
+	echo ""; \
+	git show "$$ref:CHANGELOG.md" 2>/dev/null | awk -v old="$${old#v}" ' \
+		/^## \[/ { v=$$2; gsub(/[][]/,"",v); if (v==old) exit; ver=v; s=0; next } \
+		/^### / { s=($$0 ~ /升级步骤/); if (s) printf "\n===== %s 升级步骤 =====\n", ver; next } \
+		s'; \
+	echo ""; \
+	if [ "$${old%%.*}" != "$${new%%.*}" ] && [ "$(YES)" != 1 ]; then \
+		echo "跨大版本同步（$$old -> $$new）需要人工迁移。"; \
+		echo "读完上面的升级步骤后，用 make sync-base VERSION=$(VERSION) YES=1 继续。"; \
+		exit 1; \
+	fi; \
+	git merge "$$ref" || { \
+		echo ""; \
+		echo "有冲突。解决并 commit 后，如果 server/go.mod 变了记得补一次: cd server && go mod tidy"; \
+		exit 1; }; \
+	if ! git diff --quiet ORIG_HEAD HEAD -- server/go.mod; then \
+		echo "==> server/go.mod 有变化，执行 go mod tidy"; \
+		(cd server && GOWORK=off go mod tidy) || echo "go mod tidy 失败，请手动处理"; \
+	fi
 
 base-version:
 	@echo "当前已合入的基底版本: $$(cat .base-version 2>/dev/null || echo '未知(早于 v1.0.0)')"
