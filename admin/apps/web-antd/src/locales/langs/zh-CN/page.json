@@ -1,10 +1,6 @@
 {
   "auth": {
-    "login": "登录",
-    "register": "注册",
-    "codeLogin": "验证码登录",
-    "qrcodeLogin": "二维码登录",
-    "forgetPassword": "忘记密码"
+    "login": "登录"
   },
   "dashboard": {
     "title": "概览",
