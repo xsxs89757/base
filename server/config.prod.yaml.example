@@ -8,7 +8,7 @@
 
 server:
   port: 8080                 # 首次部署时若该端口被占用，deploy.sh 会自动向后找空闲端口并回写本文件
-  mode: production           # 生产必须是 production：否则会种下演示账号 admin/jack (123456)，且 5xx 会回显内部错误详情
+  mode: production           # 生产必须是 production：否则会种下演示账号 admin/jack (123456)，且 5xx 会回显内部错误详情；生产首建的 super 用随机密码，见首次启动日志
   enable_swagger: false      # 生产关闭：接口文档不应在公网可见
   cors_origins: "https://admin.example.com"   # 按实际域名填；留 "*" 会允许任意站点跨域（且无法带凭证）
   swagger_title: ""
