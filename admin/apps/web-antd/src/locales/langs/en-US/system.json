@@ -10,7 +10,9 @@
     "oldPassword": "Current Password",
     "newPassword": "New Password",
     "confirmPassword": "Confirm Password",
-    "changeSuccess": "Password changed, please sign in again"
+    "changeSuccess": "Password changed, please sign in again",
+    "letterAndDigit": "Password must contain both letters and digits",
+    "ruleHelp": "At least 8 characters with both letters and digits; no common passwords or the username"
   },
   "dept": {
     "list": "Department List",

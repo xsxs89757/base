@@ -7,6 +7,7 @@ import { useVbenForm, z } from '#/adapter/form';
 import { changePasswordApi } from '#/api';
 import { $t } from '#/locales';
 import { useAuthStore } from '#/store';
+import { passwordRule } from '#/utils/password';
 
 const authStore = useAuthStore();
 
@@ -26,13 +27,9 @@ const [Form, formApi] = useVbenForm({
       component: 'InputPassword',
       defaultValue: '',
       fieldName: 'newPassword',
+      help: $t('system.password.ruleHelp'),
       label: $t('system.password.newPassword'),
-      rules: z
-        .string()
-        .min(
-          6,
-          $t('ui.formRules.minLength', [$t('system.password.newPassword'), 6]),
-        ),
+      rules: passwordRule($t('system.password.newPassword')),
     },
     {
       component: 'InputPassword',

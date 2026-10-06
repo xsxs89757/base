@@ -1,6 +1,7 @@
 {
   "auth": {
-    "login": "登录"
+    "login": "登录",
+    "captchaVerifying": "验证中…"
   },
   "dashboard": {
     "title": "概览",

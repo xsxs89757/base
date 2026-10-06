@@ -9,6 +9,7 @@ import { useVbenForm } from '#/adapter/form';
 import { getAllRoles } from '#/api/system/role';
 import { createUser, updateUser } from '#/api/system/user';
 import { $t } from '#/locales';
+import { passwordRule } from '#/utils/password';
 
 import { useFormSchema } from '../data';
 
@@ -73,7 +74,8 @@ const [Drawer, drawerApi] = useVbenDrawer({
           type: 'password',
         },
         fieldName: 'password',
-        rules: isEdit ? undefined : 'required',
+        // 编辑时留空表示不改；填了就按口令规则校验
+        rules: passwordRule($t('system.user.password'), isEdit),
       },
       {
         componentProps: {

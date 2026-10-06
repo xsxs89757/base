@@ -10,7 +10,9 @@
     "oldPassword": "旧密码",
     "newPassword": "新密码",
     "confirmPassword": "确认密码",
-    "changeSuccess": "密码修改成功，请重新登录"
+    "changeSuccess": "密码修改成功，请重新登录",
+    "letterAndDigit": "密码必须同时包含字母和数字",
+    "ruleHelp": "至少 8 位，同时包含字母和数字，不能是常见弱密码或包含用户名"
   },
   "dept": {
     "list": "部门列表",

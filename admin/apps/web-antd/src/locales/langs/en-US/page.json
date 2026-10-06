@@ -1,6 +1,7 @@
 {
   "auth": {
-    "login": "Login"
+    "login": "Login",
+    "captchaVerifying": "Verifying…"
   },
   "dashboard": {
     "title": "Dashboard",

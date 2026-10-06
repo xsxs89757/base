@@ -16,6 +16,7 @@ export function useFormSchema(): VbenFormSchema[] {
       component: 'Input',
       componentProps: { type: 'password' },
       fieldName: 'password',
+      help: $t('system.password.ruleHelp'),
       label: $t('system.user.password'),
     },
     {

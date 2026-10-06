@@ -19,6 +19,102 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/admin/auth/captcha": {
+            "get": {
+                "description": "系统配置 login_captcha 开启时返回一张拼图（带缺口的背景图 + 拼图块，2 分钟有效，只能提交一次）；关闭时只返回 enabled=false",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "获取登录拼图验证码",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.CaptchaResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/auth/captcha/verify": {
+            "post": {
+                "description": "提交拼图块拖到的横坐标，通过时返回一次性登录凭证（2 分钟有效）。拼图提交一次即作废；失败计入来源 IP 的登录失败次数，超限返回 429",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "认证"
+                ],
+                "summary": "校验拼图位置",
+                "parameters": [
+                    {
+                        "description": "拼图位置",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/admin.CaptchaVerifyRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "allOf": [
+                                {
+                                    "$ref": "#/definitions/dto.Response"
+                                },
+                                {
+                                    "type": "object",
+                                    "properties": {
+                                        "data": {
+                                            "$ref": "#/definitions/admin.CaptchaVerifyResponse"
+                                        }
+                                    }
+                                }
+                            ]
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/auth/change-password": {
             "post": {
                 "security": [
@@ -118,7 +214,7 @@ const docTemplate = `{
         },
         "/admin/auth/login": {
             "post": {
-                "description": "使用用户名和密码登录，返回 accessToken",
+                "description": "使用用户名和密码登录，返回 accessToken；系统配置 login_captcha 开启时还须带上拼图验证通过后拿到的 captchaToken",
                 "consumes": [
                     "application/json"
                 ],
@@ -167,6 +263,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -1850,6 +1952,73 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "admin.CaptchaResponse": {
+            "type": "object",
+            "properties": {
+                "captchaId": {
+                    "type": "string",
+                    "example": "K7Q2..."
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "height": {
+                    "type": "integer",
+                    "example": 160
+                },
+                "image": {
+                    "description": "带缺口的背景图（JPEG data URI）",
+                    "type": "string",
+                    "example": "data:image/jpeg;base64,/9j/4AAQ..."
+                },
+                "piece": {
+                    "description": "拼图块（PNG data URI，透明底，边长 pieceSize）",
+                    "type": "string",
+                    "example": "data:image/png;base64,iVBORw0KGgo..."
+                },
+                "pieceSize": {
+                    "type": "integer",
+                    "example": 66
+                },
+                "pieceY": {
+                    "description": "拼图块顶边的纵坐标；横向从 0 开始拖",
+                    "type": "integer",
+                    "example": 40
+                },
+                "width": {
+                    "type": "integer",
+                    "example": 320
+                }
+            }
+        },
+        "admin.CaptchaVerifyRequest": {
+            "type": "object",
+            "required": [
+                "captchaId"
+            ],
+            "properties": {
+                "captchaId": {
+                    "type": "string",
+                    "example": "K7Q2..."
+                },
+                "x": {
+                    "description": "拼图块左边缘拖到的横坐标（背景图原始像素，前端按显示缩放比换算）",
+                    "type": "number",
+                    "minimum": 0,
+                    "example": 152.5
+                }
+            }
+        },
+        "admin.CaptchaVerifyResponse": {
+            "type": "object",
+            "properties": {
+                "token": {
+                    "type": "string",
+                    "example": "Q4ZK..."
+                }
+            }
+        },
         "admin.ChangePasswordRequest": {
             "type": "object",
             "required": [
@@ -1859,8 +2028,9 @@ const docTemplate = `{
             "properties": {
                 "newPassword": {
                     "type": "string",
-                    "minLength": 6,
-                    "example": "654321"
+                    "maxLength": 64,
+                    "minLength": 8,
+                    "example": "Np7xQ2wLs9"
                 },
                 "oldPassword": {
                     "type": "string",
@@ -1992,9 +2162,11 @@ const docTemplate = `{
                     "example": "user@example.com"
                 },
                 "password": {
+                    "description": "另按口令强度策略校验",
                     "type": "string",
-                    "minLength": 6,
-                    "example": "123456"
+                    "maxLength": 64,
+                    "minLength": 8,
+                    "example": "Np7xQ2wLs9"
                 },
                 "phone": {
                     "type": "string",
@@ -2071,6 +2243,11 @@ const docTemplate = `{
                 "username"
             ],
             "properties": {
+                "captchaToken": {
+                    "description": "系统配置 login_captcha 开启时必填：拼图验证通过后 /admin/auth/captcha/verify 返回的一次性凭证",
+                    "type": "string",
+                    "example": "Q4ZK..."
+                },
                 "password": {
                     "type": "string",
                     "example": "123456"
@@ -2306,8 +2483,10 @@ const docTemplate = `{
                     "example": "user@example.com"
                 },
                 "password": {
+                    "description": "留空不改；非空时另按口令强度策略校验",
                     "type": "string",
-                    "minLength": 6
+                    "maxLength": 64,
+                    "minLength": 8
                 },
                 "phone": {
                     "type": "string",
