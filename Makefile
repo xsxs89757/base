@@ -249,6 +249,8 @@ base-release:
 	@! git rev-parse -q --verify "refs/tags/$(VERSION)" >/dev/null || { echo "标签 $(VERSION) 已存在"; exit 1; }
 	@grep -Eq '^## \[$(patsubst v%,%,$(VERSION))\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$$' CHANGELOG.md || { \
 		echo "CHANGELOG.md 缺少条目: ## [$(patsubst v%,%,$(VERSION))] - YYYY-MM-DD"; exit 1; }
+	@awk -v v="$(patsubst v%,%,$(VERSION))" '/^## \[/ { cur=$$2; gsub(/[][]/,"",cur); next } cur==v && /^### 升级步骤/ { found=1 } END { exit !found }' CHANGELOG.md || { \
+		echo "CHANGELOG.md 的 [$(patsubst v%,%,$(VERSION))] 条目缺少「### 升级步骤」：make sync-base 只打印这一级标题下的内容（无需操作也写一句）"; exit 1; }
 	@$(MAKE) --no-print-directory base-check
 	@printf '%s\n' "$(VERSION)" > .base-version
 	@git add .base-version && git commit -q -m "Release $(VERSION)"

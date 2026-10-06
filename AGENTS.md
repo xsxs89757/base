@@ -133,7 +133,7 @@ kit 提供的扩展点（够用就别 fork）：
 ### 基底发布（仅基底仓库本体）
 
 - 版本号语义：MAJOR = 同步后需要人工迁移；MINOR = 新功能/可选配置，可能要求重新登录；PATCH = 修 bug/文档。
-- 发布前必须在 `CHANGELOG.md` 写好 `## [X.Y.Z] - YYYY-MM-DD` 条目（含「升级步骤」），否则 `make base-release` 拒绝执行。
+- 发布前必须在 `CHANGELOG.md` 写好 `## [X.Y.Z] - YYYY-MM-DD` 条目（含三级标题 `### 升级步骤`，无需操作也写一句——`make sync-base` 只打印这一级标题下的内容），否则 `make base-release` 拒绝执行。
 - 发布：内容提交先推 main 等 CI 绿 → `make base-release VERSION=vX.Y.Z`（自动跑 `make base-check`：挂载点冻结、后端测试、交叉编译、脚本语法、Swagger 时效、脚手架测试，然后写 `.base-version`、打标签、原子推送）。
 - `.base-version` 只由发布流程写入，任何人不要手改。
 - **`ci-v1` 是给下游用的移动标签**：`checks.yml` 有变化时 `base-release` 会自动前移它，所有下游立刻用上新的 CI，不需要同步。因此改 `checks.yml` 等于改所有人的 CI——务必先在基底本体跑绿（`checks-base` job 用的就是本提交里的副本）再发布。出事回滚：
