@@ -50,6 +50,7 @@
     "icon": "图标",
     "keepAlive": "缓存标签页",
     "linkSrc": "链接地址",
+    "linkSrcInvalid": "只能填写 http(s) 链接或以 / 开头的站内路径",
     "menuName": "菜单名称",
     "menuTitle": "标题",
     "name": "菜单",

@@ -32,79 +32,88 @@ export function useGridFormSchema(): VbenFormSchema[] {
   ];
 }
 
+/**
+ * @param onActionClick 操作列按钮的点击回调
+ * @param canDelete 删除操作日志只对超管开放（后端同样限制）。操作列里只有删除，不能删时整列不显示
+ */
 export function useColumns(
   onActionClick: OnActionClickFn<SystemOperationLogApi.OperationLog>,
+  canDelete: boolean,
 ): VxeTableGridOptions<SystemOperationLogApi.OperationLog>['columns'] {
-  return [
-    {
-      field: 'username',
-      title: $t('system.operationLog.username'),
-      width: 120,
-    },
-    {
-      cellRender: {
-        name: 'CellTag',
-        options: [
-          { color: 'warning', label: 'POST', value: 'POST' },
-          { color: 'success', label: 'PUT', value: 'PUT' },
-          { color: 'error', label: 'DELETE', value: 'DELETE' },
-        ],
+  const columns: VxeTableGridOptions<SystemOperationLogApi.OperationLog>['columns'] =
+    [
+      {
+        field: 'username',
+        title: $t('system.operationLog.username'),
+        width: 120,
       },
-      field: 'method',
-      title: $t('system.operationLog.method'),
-      width: 100,
-    },
-    {
-      field: 'path',
-      minWidth: 200,
-      title: $t('system.operationLog.path'),
-    },
-    {
-      cellRender: {
-        name: 'CellTag',
-        options: [
-          { color: 'success', label: '200', value: 200 },
-          { color: 'warning', label: '400', value: 400 },
-          { color: 'error', label: '401', value: 401 },
-          { color: 'error', label: '403', value: 403 },
-          { color: 'error', label: '500', value: 500 },
-        ],
-      },
-      field: 'status',
-      title: $t('system.operationLog.status'),
-      width: 90,
-    },
-    {
-      field: 'duration',
-      formatter: ({ row }) => `${row.duration}ms`,
-      title: $t('system.operationLog.duration'),
-      width: 100,
-    },
-    {
-      field: 'ip',
-      title: $t('system.operationLog.ip'),
-      width: 140,
-    },
-    {
-      field: 'createTime',
-      title: $t('system.operationLog.createTime'),
-      width: 180,
-    },
-    {
-      align: 'center',
-      cellRender: {
-        attrs: {
-          nameField: 'path',
-          nameTitle: $t('system.operationLog.name'),
-          onClick: onActionClick,
+      {
+        cellRender: {
+          name: 'CellTag',
+          options: [
+            { color: 'warning', label: 'POST', value: 'POST' },
+            { color: 'success', label: 'PUT', value: 'PUT' },
+            { color: 'error', label: 'DELETE', value: 'DELETE' },
+          ],
         },
-        name: 'CellOperation',
-        options: [{ authCode: 'System:OperationLog:Delete', code: 'delete' }],
+        field: 'method',
+        title: $t('system.operationLog.method'),
+        width: 100,
       },
-      field: 'operation',
-      fixed: 'right',
-      title: $t('system.operationLog.operation'),
-      width: 100,
-    },
-  ];
+      {
+        field: 'path',
+        minWidth: 200,
+        title: $t('system.operationLog.path'),
+      },
+      {
+        cellRender: {
+          name: 'CellTag',
+          options: [
+            { color: 'success', label: '200', value: 200 },
+            { color: 'warning', label: '400', value: 400 },
+            { color: 'error', label: '401', value: 401 },
+            { color: 'error', label: '403', value: 403 },
+            { color: 'error', label: '500', value: 500 },
+          ],
+        },
+        field: 'status',
+        title: $t('system.operationLog.status'),
+        width: 90,
+      },
+      {
+        field: 'duration',
+        formatter: ({ row }) => `${row.duration}ms`,
+        title: $t('system.operationLog.duration'),
+        width: 100,
+      },
+      {
+        field: 'ip',
+        title: $t('system.operationLog.ip'),
+        width: 140,
+      },
+      {
+        field: 'createTime',
+        title: $t('system.operationLog.createTime'),
+        width: 180,
+      },
+      {
+        align: 'center',
+        cellRender: {
+          attrs: {
+            nameField: 'path',
+            nameTitle: $t('system.operationLog.name'),
+            onClick: onActionClick,
+          },
+          name: 'CellOperation',
+          options: [{ code: 'delete' }],
+        },
+        field: 'operation',
+        fixed: 'right',
+        title: $t('system.operationLog.operation'),
+        width: 100,
+      },
+    ];
+  return canDelete
+    ? columns
+    : columns.filter((col) => col.field !== 'operation');
 }

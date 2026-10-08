@@ -5,6 +5,7 @@ import type {
 } from '#/adapter/vxe-table';
 import type { SystemOperationLogApi } from '#/api/system/operation-log';
 
+import { useAccess } from '@vben/access';
 import { Page } from '@vben/common-ui';
 import { createIconifyIcon } from '@vben/icons';
 
@@ -22,13 +23,17 @@ import { useColumns, useGridFormSchema } from './data';
 
 const Trash2 = createIconifyIcon('lucide:trash-2');
 
+// 审计记录只有超管能删（后端同样只认超管），普通管理员即便有删除权限码也不显示删除/清空
+const { hasAccessByRoles } = useAccess();
+const canDelete = hasAccessByRoles(['super']);
+
 const [Grid, gridApi] = useVbenVxeGrid({
   formOptions: {
     schema: useGridFormSchema(),
     submitOnChange: true,
   },
   gridOptions: {
-    columns: useColumns(onActionClick),
+    columns: useColumns(onActionClick, canDelete),
     height: 'auto',
     keepSource: true,
     proxyConfig: {
@@ -98,12 +103,7 @@ function onClear() {
   <Page auto-content-height>
     <Grid :table-title="$t('system.operationLog.list')">
       <template #toolbar-tools>
-        <Button
-          v-access:code="'System:OperationLog:Delete'"
-          danger
-          type="primary"
-          @click="onClear"
-        >
+        <Button v-if="canDelete" danger type="primary" @click="onClear">
           <Trash2 class="size-4" />
           {{ $t('system.operationLog.clear') }}
         </Button>

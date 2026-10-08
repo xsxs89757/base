@@ -2,11 +2,15 @@ module base
 
 go 1.25.0
 
+// 编译用的 Go 至少 1.26.6：更早的 1.26.x 标准库有 crypto/tls、x509、net/http 等已公开漏洞，
+// 会被编进线上二进制。本机 Go 更旧时 go 命令会自动下载这个版本（GOTOOLCHAIN=auto，默认值）。
+toolchain go1.26.6
+
 require (
 	github.com/gofiber/fiber/v2 v2.52.15
 	github.com/gofiber/swagger v1.1.1
 	github.com/swaggo/swag v1.16.6
-	github.com/xsxs89757/base-kit v1.3.0
+	github.com/xsxs89757/base-kit v1.4.0
 	gorm.io/gorm v1.31.2
 )
 

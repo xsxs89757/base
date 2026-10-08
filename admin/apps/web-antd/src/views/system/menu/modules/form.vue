@@ -242,7 +242,15 @@ const schema: VbenFormSchema[] = [
     },
     fieldName: 'linkSrc',
     label: $t('system.menu.linkSrc'),
-    rules: z.string().url($t('ui.formRules.invalidURL')),
+    // 与后端一致：只允许 http(s) 链接或站内路径。z.string().url() 会放过 javascript: 地址，
+    // 而这个值会被原样交给 <iframe src> / window.open，超管点开菜单时脚本就会执行
+    rules: z
+      .string()
+      .trim()
+      .refine(
+        (value) => /^https?:\/\/[^/\s]/i.test(value) || value.startsWith('/'),
+        $t('system.menu.linkSrcInvalid'),
+      ),
   },
   {
     component: 'Input',

@@ -1160,6 +1160,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "仅超级管理员可清空；日常清理请用配置 server.op_log_retention_days 按保留期自动删除",
                 "produces": [
                     "application/json"
                 ],
@@ -1170,6 +1171,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
@@ -1276,6 +1283,7 @@ const docTemplate = `{
                         "BearerAuth": []
                     }
                 ],
+                "description": "仅超级管理员可删除（审计记录不应由被审计的人抹掉）",
                 "produces": [
                     "application/json"
                 ],
@@ -1295,6 +1303,12 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/dto.Response"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
                         "schema": {
                             "$ref": "#/definitions/dto.Response"
                         }
