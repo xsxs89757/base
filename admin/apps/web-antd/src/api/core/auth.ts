@@ -36,6 +36,11 @@ export namespace AuthApi {
     x: number;
   }
 
+  /** 验证码接口的原始响应（走 baseRequestClient，不经统一拦截器） */
+  export interface CaptchaRawResult {
+    data: { data?: CaptchaResult };
+  }
+
   /** 拼图验证接口的原始响应（走 baseRequestClient，不经统一拦截器） */
   export interface CaptchaVerifyRawResult {
     data: { data?: { token: string }; message?: string };
@@ -62,9 +67,13 @@ export async function changePasswordApi(data: AuthApi.ChangePasswordParams) {
 
 /**
  * 获取登录拼图验证码。拼图只能提交一次，失败后需重新获取。
+ * 走 baseRequestClient、不经统一拦截器：这个接口在未登录时调用，后端低于 base-kit v1.3.0 时没有它，
+ * 请求会落进需要登录的路由返回 401，经拦截器就会触发「登录过期 → 登出」，登录页再也进不去。
  */
-export async function getCaptchaApi() {
-  return requestClient.get<AuthApi.CaptchaResult>('/auth/captcha');
+export async function getCaptchaApi(): Promise<AuthApi.CaptchaResult> {
+  const resp =
+    await baseRequestClient.get<AuthApi.CaptchaRawResult>('/auth/captcha');
+  return resp.data?.data ?? { enabled: false };
 }
 
 /**

@@ -71,7 +71,9 @@ async function refresh() {
   try {
     puzzle.value = await getCaptchaApi();
   } catch {
-    // 失败提示由 requestClient 的响应拦截器统一弹出
+    // getCaptchaApi 不经统一拦截器，失败要自己在图上提示
+    state.failText = $t('page.auth.captchaLoadFailed');
+    state.result = 'fail';
   }
 }
 

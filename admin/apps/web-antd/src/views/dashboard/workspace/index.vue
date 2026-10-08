@@ -1,14 +1,12 @@
 <script lang="ts" setup>
-import type { WorkbenchQuickNavItem } from '@vben/common-ui';
 import type { MenuRecordRaw } from '@vben/types';
 
 import { computed } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
+import { useRoute } from 'vue-router';
 
-import { Page, VbenAvatar, WorkbenchQuickNav } from '@vben/common-ui';
+import { Page, VbenAvatar } from '@vben/common-ui';
 import { preferences } from '@vben/preferences';
 import { useAccessStore, useUserStore } from '@vben/stores';
-import { openWindow } from '@vben/utils';
 
 import { $t } from '#/locales';
 
@@ -16,7 +14,6 @@ defineOptions({ name: 'Workspace' });
 
 const userStore = useUserStore();
 const accessStore = useAccessStore();
-const router = useRouter();
 const route = useRoute();
 
 function greetingPeriod(hour: number) {
@@ -36,34 +33,16 @@ const roleText = computed(
   () => (userStore.userInfo?.roles ?? []).join(', ') || '-',
 );
 
-/** 递归收集可访问的叶子菜单（排除当前页），作为快捷入口 */
-function collectLeaves(menus: MenuRecordRaw[], out: MenuRecordRaw[] = []) {
-  for (const menu of menus) {
-    if (menu.children?.length) {
-      collectLeaves(menu.children, out);
-    } else if (menu.path && menu.path !== route.path) {
-      out.push(menu);
-    }
-  }
-  return out;
+/** 除工作台本身外是否还有可访问的菜单：一个都没有时提示找管理员分配权限 */
+function hasOtherMenu(menus: MenuRecordRaw[]): boolean {
+  return menus.some((menu) =>
+    menu.children?.length
+      ? hasOtherMenu(menu.children)
+      : !!menu.path && menu.path !== route.path,
+  );
 }
 
-const quickNavItems = computed<WorkbenchQuickNavItem[]>(() =>
-  collectLeaves(accessStore.accessMenus).map((menu) => ({
-    icon: menu.icon || 'carbon:application',
-    title: $t(menu.name),
-    url: menu.path,
-  })),
-);
-
-function navTo(item: WorkbenchQuickNavItem) {
-  if (!item.url) return;
-  if (item.url.startsWith('http')) {
-    openWindow(item.url);
-    return;
-  }
-  router.push(item.url);
-}
+const hasMenus = computed(() => hasOtherMenu(accessStore.accessMenus));
 </script>
 
 <template>
@@ -83,13 +62,7 @@ function navTo(item: WorkbenchQuickNavItem) {
       </div>
     </div>
 
-    <WorkbenchQuickNav
-      v-if="quickNavItems.length > 0"
-      :items="quickNavItems"
-      :title="$t('workspace.quickNav')"
-      @click="navTo"
-    />
-    <div v-else class="card-box p-5 text-center text-foreground/60">
+    <div v-if="!hasMenus" class="card-box p-5 text-center text-foreground/60">
       {{ $t('workspace.noMenu') }}
     </div>
   </Page>

@@ -37,13 +37,10 @@ async function login(params: Recordable<any>) {
 }
 
 async function handleLogin(values: Recordable<any>) {
-  let captcha: AuthApi.CaptchaResult;
-  try {
-    captcha = await getCaptchaApi();
-  } catch {
-    return;
-  }
-  if (!captcha.enabled) {
+  // 拿不到验证码（网络抖动、后端还没升级到带验证码的版本）按未开启处理：
+  // 后端若真开着，会拒绝没有凭证的登录并提示「请先完成安全验证」，不会因此放过
+  const captcha = await getCaptchaApi().catch(() => undefined);
+  if (!captcha?.enabled) {
     await login(values);
     return;
   }
@@ -86,17 +83,23 @@ const formSchema = computed((): VbenFormSchema[] => {
 </script>
 
 <template>
-  <AuthenticationLogin
-    :form-schema="formSchema"
-    :loading="authStore.loginLoading"
-    :show-code-login="false"
-    :show-forget-password="false"
-    :show-qrcode-login="false"
-    :show-register="false"
-    :show-third-party-login="false"
-    @submit="handleLogin"
-  />
-  <CaptchaModal :title="$t('ui.captcha.title')">
-    <PuzzleCaptcha :initial="pendingPuzzle" @success="handleCaptchaSuccess" />
-  </CaptchaModal>
+  <!--
+    必须单根：登录布局把 class（宽度等）透传给本组件，并用 <Transition> 包着它，
+    多根组件既接不住 class（表单会缩窄），也没法做过渡
+  -->
+  <div>
+    <AuthenticationLogin
+      :form-schema="formSchema"
+      :loading="authStore.loginLoading"
+      :show-code-login="false"
+      :show-forget-password="false"
+      :show-qrcode-login="false"
+      :show-register="false"
+      :show-third-party-login="false"
+      @submit="handleLogin"
+    />
+    <CaptchaModal :title="$t('ui.captcha.title')">
+      <PuzzleCaptcha :initial="pendingPuzzle" @success="handleCaptchaSuccess" />
+    </CaptchaModal>
+  </div>
 </template>

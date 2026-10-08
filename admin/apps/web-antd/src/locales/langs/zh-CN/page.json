@@ -1,7 +1,8 @@
 {
   "auth": {
     "login": "登录",
-    "captchaVerifying": "验证中…"
+    "captchaVerifying": "验证中…",
+    "captchaLoadFailed": "加载失败，请点右上角刷新"
   },
   "dashboard": {
     "title": "概览",

@@ -1,7 +1,8 @@
 {
   "auth": {
     "login": "Login",
-    "captchaVerifying": "Verifying…"
+    "captchaVerifying": "Verifying…",
+    "captchaLoadFailed": "Failed to load, click refresh to retry"
   },
   "dashboard": {
     "title": "Dashboard",
