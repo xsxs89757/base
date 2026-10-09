@@ -6,7 +6,9 @@ tmp_dir = "tmp"
   # CGO_LDFLAGS=-w 抑制 macOS ld 链接器在 SDK 版本与 linker 版本不匹配时
   # 反复输出的 "object file ... was built for newer 'macOS' version" 警告。
   # 该警告不影响二进制功能，仅噪声，根治需对齐 Xcode CLT 与 Go 工具链。
-  cmd = "CGO_LDFLAGS=-w go build -o ./tmp/server ."
+  # 必须在 go env 原值上追加而不是覆盖：有人在 go env 里把 CC 指到 CLT 的 clang、
+  # 靠 CGO_LDFLAGS 里的 -isysroot 找 SDK，覆盖掉就会报 ld: library 'resolv' not found。
+  cmd = "CGO_LDFLAGS=\"$(go env CGO_LDFLAGS) -w\" go build -o ./tmp/server ."
   delay = 1000
   exclude_dir = ["tmp", "docs", "vendor"]
   exclude_regex = ["_test.go"]

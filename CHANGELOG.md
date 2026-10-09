@@ -8,6 +8,21 @@
 
 ## [Unreleased]
 
+## [2.4.1] - 2026-10-09
+
+修 macOS 上 `./dev.sh` 后端链接失败。
+
+### 修复
+
+- `./dev.sh` 起后端时链接失败（`ld: library 'resolv' not found`）：`server/.air.toml` 的编译命令用
+  `CGO_LDFLAGS=-w` 整个覆盖了 go env 里的值，本机在 go env 里把 `CC` 指到 CLT 的 clang、靠 `CGO_LDFLAGS`
+  里的 `-isysroot` 找 SDK 的，SDK 路径就丢了。改为在原值上追加 `-w`；没设过的机器原值是默认的 `-O2 -g`，结果不变。
+  注意此时 `./dev.sh` 仍会打印「后端启动成功」（只看 air 进程在不在），后端其实没起来。
+
+### 升级步骤
+
+无需操作；正在跑的 `./dev.sh` 重启一次才会用上新的 air 配置。
+
 ## [2.4.0] - 2026-10-08
 
 安全审计后的三项修复，base-kit 升到 v1.4.0。
