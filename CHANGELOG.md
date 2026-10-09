@@ -8,6 +8,24 @@
 
 ## [Unreleased]
 
+## [2.4.2] - 2026-10-09
+
+修下游每次 `./dev.sh` 都把 `server/docs` 改脏。
+
+### 修复
+
+- `./dev.sh` 生成 Swagger 改为有 make 就走 `make swagger`（和 `scripts/check.sh` 同一个做法），没有 make
+  （Windows 的 Git Bash）才退回直接调 swag 并提示一句。此前 dev.sh 写死了 swag 命令，下游改过 swagger 目标的
+  （比如加 `--tags` 把后台和开放接口分成两份文档）每次启动都会生成出和 CI 不一样的 docs，工作区平白多出
+  上千行改动。基底本身两条命令一样，结果不变。
+- Swagger 生成失败时，`docs/` 下任何一个已提交的生成物缺失都会从 git 恢复（此前只看 `docs/docs.go`，
+  下游多生成的那份被 import 时缺了一样编译不过）。
+
+### 升级步骤
+
+无需操作。改过 swagger 目标的下游，之前被 `./dev.sh` 改脏的 `server/docs` 确认没有自己要的改动后
+可以 `git checkout -- server/docs` 丢掉。
+
 ## [2.4.1] - 2026-10-09
 
 修 macOS 上 `./dev.sh` 后端链接失败。

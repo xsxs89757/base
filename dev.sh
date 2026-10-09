@@ -398,25 +398,35 @@ fi
 # 这类真该处理的警告冲得看不见。这里只滤掉流水账——不用 swag 自己的 -q，那个把
 # 警告和报错也一并吞了。
 SWAG_NOISE='Generating |TypeSpecDef is nil|Generate swagger docs|Generate general API Info|create (docs\.go|swagger\.json|swagger\.yaml) at '
+# 有 make 就走 make swagger，和 scripts/check.sh 同一个理由：下游可能改过 swagger 目标
+# （多生成一份文档、加 --tags 把两份分开），这里写死 swag 命令会生成出和 CI 不一样的
+# docs，每次 ./dev.sh 都把工作区改脏。Windows 的 Git Bash 不带 make，退回直接调 swag。
 # swag 版本与 Makefile、CI 保持一致：不同版本的生成物有差异，CI 的 docs 时效检查会误报。
 # --parseDependencyLevel 3 让 swag 解析 module cache 里 base-kit 的 handler 注解（框架层已搬到那边），
 # --packagePrefix 限定只扫本模块和 kit，不扫 fiber/gorm，快 3 倍。
 # 用 go run 而不是 go install，省掉"装没装、装的哪个版本"的分歧（首次编译后有缓存）。
-# 注意：这里不加 GOWORK=off——make kit-dev 时开发者就是想看本地 kit 的接口文档。
+# 注意：两条路都不加 GOWORK=off——make kit-dev 时开发者就是想看本地 kit 的接口文档。
 # 但那份 docs 别提交：CI 用 go.mod 钉死的版本重新生成后比对，会直接拦下。
 SWAG_CMD=(go run github.com/swaggo/swag/cmd/swag@v1.16.6)
+if command -v make >/dev/null 2>&1; then
+    SWAG_RUN=(make -C "$ROOT_DIR" --no-print-directory swagger)
+else
+    echo -e "${YELLOW}      未找到 make，直接调用 swag（若你定制过 swagger 目标，请装 make 或手动生成）${NC}"
+    SWAG_RUN=("${SWAG_CMD[@]}" init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit)
+fi
 echo -e "${YELLOW}      生成 Swagger 文档...${NC}"
 SWAG_LOG=$(mktemp)
-if "${SWAG_CMD[@]}" init -g main.go -o docs --parseDependencyLevel 3 --packagePrefix base,github.com/xsxs89757/base-kit >"$SWAG_LOG" 2>&1; then
+if "${SWAG_RUN[@]}" >"$SWAG_LOG" 2>&1; then
     grep -vE "$SWAG_NOISE" "$SWAG_LOG" | sed 's/^/      /' || true
     echo -e "${GREEN}      Swagger 文档已生成${NC}"
 else
     # 失败时不过滤：报错往往就藏在被滤掉的那类行的上下文里
     echo -e "${YELLOW}      Swagger 生成失败（不影响启动，继续用仓库内已有 docs）:${NC}"
     tail -20 "$SWAG_LOG" | sed 's/^/      /'
-    # swag 中途失败可能把 docs/ 写坏（docs.go 缺失会让 go build 编译不过、air 起不来），从 git 恢复
-    if [ ! -f docs/docs.go ]; then
-        echo -e "${YELLOW}      docs/docs.go 缺失，从 git 恢复 docs/ ...${NC}"
+    # swag 中途失败可能把 docs/ 写坏（docs.go 缺失会让 go build 编译不过、air 起不来），从 git 恢复。
+    # 下游 make swagger 可能生成好几份（docs/open/docs.go 同样被 import），所以看 docs/ 下有没有已提交的文件不见了
+    if [ ! -f docs/docs.go ] || [ -n "$(git ls-files --deleted -- docs 2>/dev/null)" ]; then
+        echo -e "${YELLOW}      docs/ 下有生成物缺失，从 git 恢复 docs/ ...${NC}"
         git checkout -- docs 2>/dev/null || true
     fi
 fi
